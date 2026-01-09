@@ -9,7 +9,7 @@ impl MetricsExporter {
     }
 
     pub fn export_prometheus(snapshot: &MetricsSnapshot) -> String {
-        format!(
+        let mut output = format!(
             "# HELP ultrabalancer_requests_total Total number of requests\n\
              # TYPE ultrabalancer_requests_total counter\n\
              ultrabalancer_requests_total {}\n\
@@ -36,7 +36,10 @@ impl MetricsExporter {
              \n\
              # HELP ultrabalancer_requests_per_second Requests per second\n\
              # TYPE ultrabalancer_requests_per_second gauge\n\
-             ultrabalancer_requests_per_second {}\n",
+             ultrabalancer_requests_per_second {}\n\
+             \n\
+             # HELP ultrabalancer_backend_requests_total Total requests per backend\n\
+             # TYPE ultrabalancer_backend_requests_total counter\n",
             snapshot.total_requests,
             snapshot.successful_requests,
             snapshot.failed_requests,
@@ -47,6 +50,23 @@ impl MetricsExporter {
             snapshot.total_requests,
             snapshot.uptime_seconds,
             snapshot.requests_per_second,
-        )
+        );
+
+        for (backend, metrics) in &snapshot.backend_metrics {
+            output.push_str(&format!(
+                "ultrabalancer_backend_requests_total{{backend=\"{}\"}} {}\n\
+                 ultrabalancer_backend_requests_success{{backend=\"{}\"}} {}\n\
+                 ultrabalancer_backend_requests_failed{{backend=\"{}\"}} {}\n\
+                 ultrabalancer_backend_response_time_ms{{backend=\"{}\"}} {}\n\
+                 ultrabalancer_backend_active_connections{{backend=\"{}\"}} {}\n",
+                backend, metrics.total_requests,
+                backend, metrics.successful_requests,
+                backend, metrics.failed_requests,
+                backend, metrics.avg_response_time_ms,
+                backend, metrics.active_connections,
+            ));
+        }
+
+        output
     }
 }

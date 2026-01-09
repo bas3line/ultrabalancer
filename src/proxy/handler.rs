@@ -1,6 +1,7 @@
 use crate::backend::{Server, ServerPool};
 use crate::balancer::LoadBalancerSelector;
 use crate::metrics::{MetricsCollector, MetricsExporter};
+use crate::utils::rate_limiter::RateLimiter;
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
@@ -14,6 +15,7 @@ pub struct RequestHandler {
     selector: LoadBalancerSelector,
     pool: ServerPool,
     metrics: Arc<MetricsCollector>,
+    rate_limiter: Option<RateLimiter>,
 }
 
 impl RequestHandler {
@@ -26,7 +28,13 @@ impl RequestHandler {
             selector,
             pool,
             metrics,
+            rate_limiter: None,
         }
+    }
+
+    pub fn with_rate_limiter(mut self, rate_limiter: RateLimiter) -> Self {
+        self.rate_limiter = Some(rate_limiter);
+        self
     }
 
     pub async fn handle(
@@ -36,6 +44,17 @@ impl RequestHandler {
     ) -> Result<Response<Full<Bytes>>, hyper::Error> {
         let start = Instant::now();
         self.metrics.increment_total_requests();
+
+        if let Some(ref limiter) = self.rate_limiter {
+            if !limiter.check() {
+                warn!("Rate limit exceeded for {}", client_addr);
+                self.metrics.increment_failed_requests();
+                return Ok(Self::error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "Rate limit exceeded",
+                ));
+            }
+        }
 
         let path = req.uri().path();
 
@@ -76,11 +95,15 @@ impl RequestHandler {
         };
 
         server.increment_connections();
+        let backend_addr = server.address().to_string();
         let response = self.proxy_to_backend(req, &server).await;
         server.decrement_connections();
 
         let duration = start.elapsed();
         self.metrics.record_response_time(duration);
+
+        let success = response.as_ref().map_or(false, |r| r.status().is_success());
+        self.metrics.record_backend_request(&backend_addr, success, duration);
 
         response
     }
@@ -184,6 +207,7 @@ impl Clone for RequestHandler {
             selector: self.selector.clone(),
             pool: self.pool.clone(),
             metrics: Arc::clone(&self.metrics),
+            rate_limiter: self.rate_limiter.clone(),
         }
     }
 }

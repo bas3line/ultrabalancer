@@ -6,7 +6,8 @@ mod metrics;
 mod proxy;
 mod utils;
 
-use crate::backend::{HealthCheckConfig, HealthChecker, Server, ServerPool};
+use crate::backend::{HealthChecker, Server, ServerPool};
+use crate::config::HealthCheckConfig;
 use crate::balancer::{Algorithm, LoadBalancerSelector};
 use crate::config::Config;
 use crate::metrics::MetricsCollector;
@@ -14,7 +15,6 @@ use crate::proxy::ProxyServer;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::{error, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -280,10 +280,15 @@ async fn execute_load_balancer(
     let metrics = Arc::new(MetricsCollector::new());
 
     let health_config = HealthCheckConfig {
-        interval: Duration::from_millis(health_interval_ms),
-        timeout: Duration::from_secs(2),
-        max_failures,
         enabled: health_enabled,
+        interval_ms: health_interval_ms,
+        max_failures,
+        path: "/".to_string(),
+        expected_status: 200,
+        timeout_ms: 2000,
+        headers: std::collections::HashMap::new(),
+        expected_body: None,
+        circuit_breaker: None,
     };
 
     let health_checker = Arc::new(HealthChecker::new(pool.clone(), health_config));

@@ -1,5 +1,6 @@
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -17,6 +18,45 @@ pub struct MetricsSnapshot {
     pub p99_response_time_ms: f64,
     pub uptime_seconds: u64,
     pub requests_per_second: f64,
+    pub backend_metrics: HashMap<String, BackendMetrics>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackendMetrics {
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub failed_requests: u64,
+    pub avg_response_time_ms: f64,
+    pub active_connections: u64,
+}
+
+struct BackendMetricsData {
+    total_requests: Arc<AtomicU64>,
+    successful_requests: Arc<AtomicU64>,
+    failed_requests: Arc<AtomicU64>,
+    response_times: Arc<RwLock<Vec<Duration>>>,
+}
+
+impl BackendMetricsData {
+    fn new() -> Self {
+        Self {
+            total_requests: Arc::new(AtomicU64::new(0)),
+            successful_requests: Arc::new(AtomicU64::new(0)),
+            failed_requests: Arc::new(AtomicU64::new(0)),
+            response_times: Arc::new(RwLock::new(Vec::with_capacity(1000))),
+        }
+    }
+}
+
+impl Clone for BackendMetricsData {
+    fn clone(&self) -> Self {
+        Self {
+            total_requests: Arc::clone(&self.total_requests),
+            successful_requests: Arc::clone(&self.successful_requests),
+            failed_requests: Arc::clone(&self.failed_requests),
+            response_times: Arc::clone(&self.response_times),
+        }
+    }
 }
 
 pub struct MetricsCollector {
@@ -25,6 +65,7 @@ pub struct MetricsCollector {
     failed_requests: AtomicU64,
     response_times: Arc<RwLock<Vec<Duration>>>,
     start_time: Instant,
+    backend_metrics: Arc<RwLock<HashMap<String, BackendMetricsData>>>,
 }
 
 impl MetricsCollector {
@@ -35,7 +76,16 @@ impl MetricsCollector {
             failed_requests: AtomicU64::new(0),
             response_times: Arc::new(RwLock::new(Vec::with_capacity(10000))),
             start_time: Instant::now(),
+            backend_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    fn get_or_create_backend_metrics(&self, backend: &str) -> BackendMetricsData {
+        let mut backends = self.backend_metrics.write();
+        backends
+            .entry(backend.to_string())
+            .or_insert_with(BackendMetricsData::new)
+            .clone()
     }
 
     pub fn increment_total_requests(&self) {
@@ -56,6 +106,28 @@ impl MetricsCollector {
 
         if times.len() > 10000 {
             times.drain(0..5000);
+        }
+    }
+
+    pub fn record_backend_request(&self, backend: &str, success: bool, duration: Duration) {
+        let backends = self.backend_metrics.read();
+        if let Some(backend_data) = backends.get(backend) {
+            backend_data.total_requests.fetch_add(1, Ordering::Relaxed);
+            if success {
+                backend_data.successful_requests.fetch_add(1, Ordering::Relaxed);
+            } else {
+                backend_data.failed_requests.fetch_add(1, Ordering::Relaxed);
+            }
+
+            let mut times = backend_data.response_times.write();
+            times.push(duration);
+            if times.len() > 1000 {
+                times.drain(0..500);
+            }
+        } else {
+            drop(backends);
+            self.get_or_create_backend_metrics(backend);
+            self.record_backend_request(backend, success, duration);
         }
     }
 
@@ -96,6 +168,33 @@ impl MetricsCollector {
             0.0
         };
 
+        let backend_metrics = {
+            let backends = self.backend_metrics.read();
+            backends
+                .iter()
+                .map(|(name, data)| {
+                    let times = data.response_times.read();
+                    let avg = if times.is_empty() {
+                        0.0
+                    } else {
+                        let sum: Duration = times.iter().sum();
+                        sum.as_secs_f64() / times.len() as f64 * 1000.0
+                    };
+
+                    (
+                        name.clone(),
+                        BackendMetrics {
+                            total_requests: data.total_requests.load(Ordering::Relaxed),
+                            successful_requests: data.successful_requests.load(Ordering::Relaxed),
+                            failed_requests: data.failed_requests.load(Ordering::Relaxed),
+                            avg_response_time_ms: avg,
+                            active_connections: 0,
+                        },
+                    )
+                })
+                .collect()
+        };
+
         MetricsSnapshot {
             total_requests: total,
             successful_requests: self.successful_requests.load(Ordering::Relaxed),
@@ -108,6 +207,7 @@ impl MetricsCollector {
             p99_response_time_ms: p99,
             uptime_seconds: uptime.as_secs(),
             requests_per_second: rps,
+            backend_metrics,
         }
     }
 
