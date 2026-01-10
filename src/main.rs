@@ -1,9 +1,17 @@
+#![allow(dead_code)]
+
+mod admin;
 mod backend;
 mod balancer;
+mod bench;
+mod cache;
 mod config;
 mod error;
 mod metrics;
+mod middleware;
 mod proxy;
+mod routing;
+mod tls;
 mod utils;
 
 use crate::backend::{HealthChecker, Server, ServerPool};
@@ -21,7 +29,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 #[derive(Parser)]
 #[command(name = "ultrabalancer")]
 #[command(author = "Kira <kiraa@tuta.io>")]
-#[command(version = "1.0.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Production-ready high-performance load balancer", long_about = None)]
 #[command(styles = get_styles())]
 struct Cli {
@@ -367,7 +375,7 @@ timeout:
 }
 
 fn execute_info() {
-    println!("UltraBalancer v1.0.0");
+    println!("UltraBalancer v{}", env!("CARGO_PKG_VERSION"));
     println!("Production-grade load balancer written in Rust\n");
     println!("Supported Algorithms:");
     println!("  • round-robin       - Distribute requests evenly");
@@ -386,7 +394,7 @@ fn execute_info() {
 
 fn print_banner() {
     println!("\n╔══════════════════════════════════════════╗");
-    println!("║      UltraBalancer v2.0.0                ║");
+    println!("║      UltraBalancer v{}                ║", env!("CARGO_PKG_VERSION"));
     println!("║  Production Load Balancer                ║");
     println!("╚══════════════════════════════════════════╝\n");
 }

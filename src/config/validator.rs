@@ -9,12 +9,12 @@ impl ConfigValidator {
             anyhow::bail!("At least one backend server is required");
         }
 
-        if config.listen_port == 0 || config.listen_port > 65535 {
+        if config.listen_port == 0 {
             anyhow::bail!("Invalid listen port: {}", config.listen_port);
         }
 
         for backend in &config.backends {
-            if backend.port == 0 || backend.port > 65535 {
+            if backend.port == 0 {
                 anyhow::bail!("Invalid backend port: {}", backend.port);
             }
 
