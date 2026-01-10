@@ -49,6 +49,8 @@ impl RetryMiddleware {
         false
     }
 
+    /// Wait before retry attempt. Called with attempt=0 for first retry, attempt=1 for second, etc.
+    /// Delay: initial_delay_ms * multiplier^attempt (e.g., 100ms, 200ms, 400ms for multiplier=2)
     pub async fn wait(&self, attempt: u32) {
         let base_delay = self.config.initial_delay_ms as f64
             * self.config.multiplier.powi(attempt as i32);

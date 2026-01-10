@@ -55,7 +55,6 @@ pub struct ConnectionPool {
     max_per_backend: usize,
     clients: DashMap<String, Arc<PooledConnection>>,
     semaphores: DashMap<String, Arc<Semaphore>>,
-    active_connections: DashMap<String, Arc<AtomicU64>>,
     total_connections: AtomicU64,
 }
 
@@ -65,7 +64,6 @@ impl ConnectionPool {
             max_per_backend: max_connections_per_backend,
             clients: DashMap::new(),
             semaphores: DashMap::new(),
-            active_connections: DashMap::new(),
             total_connections: AtomicU64::new(0),
         }
     }
@@ -88,34 +86,21 @@ impl ConnectionPool {
             .or_insert_with(|| Arc::new(Semaphore::new(self.max_per_backend)))
             .clone();
 
-        match sem.try_acquire_owned() {
-            Ok(permit) => {
-                self.active_connections
-                    .entry(backend.to_string())
-                    .or_insert_with(|| Arc::new(AtomicU64::new(0)))
-                    .fetch_add(1, Ordering::Relaxed);
-                Some(permit)
-            }
-            Err(_) => None,
-        }
+        sem.try_acquire_owned().ok()
     }
 
-    pub fn release(&self, backend: &str) {
-        if let Some(counter) = self.active_connections.get(backend) {
-            counter.fetch_sub(1, Ordering::Relaxed);
-        }
-        // Note: semaphore permit is released automatically when OwnedSemaphorePermit is dropped
-    }
-
-    pub fn active_count(&self, backend: &str) -> u64 {
-        self.active_connections
+    pub fn active_count(&self, backend: &str) -> usize {
+        self.semaphores
             .get(backend)
-            .map(|c| c.load(Ordering::Relaxed))
+            .map(|sem| self.max_per_backend - sem.available_permits())
             .unwrap_or(0)
     }
 
     pub fn available(&self, backend: &str) -> usize {
-        self.max_per_backend.saturating_sub(self.active_count(backend) as usize)
+        self.semaphores
+            .get(backend)
+            .map(|sem| sem.available_permits())
+            .unwrap_or(self.max_per_backend)
     }
 
     pub fn total_connections(&self) -> u64 {
@@ -125,7 +110,6 @@ impl ConnectionPool {
     pub fn remove_backend(&self, backend: &str) {
         self.clients.remove(backend);
         self.semaphores.remove(backend);
-        self.active_connections.remove(backend);
     }
 }
 
@@ -135,7 +119,6 @@ impl Clone for ConnectionPool {
             max_per_backend: self.max_per_backend,
             clients: self.clients.clone(),
             semaphores: self.semaphores.clone(),
-            active_connections: self.active_connections.clone(),
             total_connections: AtomicU64::new(self.total_connections.load(Ordering::Relaxed)),
         }
     }

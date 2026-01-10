@@ -1,8 +1,9 @@
 use bytes::Bytes;
 use moka::future::Cache;
+use moka::Expiry;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use xxhash_rust::xxh3::xxh3_64;
 
 #[derive(Clone)]
@@ -11,6 +12,41 @@ pub struct CachedResponse {
     pub headers: Vec<(String, String)>,
     pub body: Bytes,
     pub created_at: u64,
+    pub ttl: Duration,
+}
+
+struct PerEntryExpiry;
+
+impl Expiry<u64, Arc<CachedResponse>> for PerEntryExpiry {
+    fn expire_after_create(
+        &self,
+        _key: &u64,
+        value: &Arc<CachedResponse>,
+        _current_time: Instant,
+    ) -> Option<Duration> {
+        Some(value.ttl)
+    }
+
+    fn expire_after_read(
+        &self,
+        _key: &u64,
+        _value: &Arc<CachedResponse>,
+        _current_time: Instant,
+        _current_duration: Option<Duration>,
+        _last_modified_at: Instant,
+    ) -> Option<Duration> {
+        None
+    }
+
+    fn expire_after_update(
+        &self,
+        _key: &u64,
+        value: &Arc<CachedResponse>,
+        _current_time: Instant,
+        _current_duration: Option<Duration>,
+    ) -> Option<Duration> {
+        Some(value.ttl)
+    }
 }
 
 pub struct ResponseCache {
@@ -25,8 +61,7 @@ impl ResponseCache {
     pub fn new(max_entries: u64, default_ttl_secs: u64) -> Self {
         let cache = Cache::builder()
             .max_capacity(max_entries)
-            .time_to_live(Duration::from_secs(default_ttl_secs))
-            .time_to_idle(Duration::from_secs(default_ttl_secs / 2))
+            .expire_after(PerEntryExpiry)
             .build();
 
         Self {

@@ -40,11 +40,12 @@ impl RequestHandler {
         pool: ServerPool,
         metrics: Arc<MetricsCollector>,
     ) -> Self {
+        // Note: No client-level timeout set here; request_timeout is enforced
+        // via tokio::time::timeout wrapper in handle() for clearer control
         let http_client = reqwest::Client::builder()
             .pool_max_idle_per_host(500)
             .pool_idle_timeout(Duration::from_secs(90))
             .tcp_keepalive(Duration::from_secs(60))
-            .timeout(Duration::from_secs(30))
             .tcp_nodelay(true)
             .build()
             .expect("Failed to create HTTP client");
@@ -260,6 +261,20 @@ impl RequestHandler {
         let headers = req.headers().clone();
         let path = uri.path();
 
+        // Apply routing rules if configured
+        let (routed_path, _backend_group) = if let Some(ref router) = self.router {
+            let headers_map: std::collections::HashMap<String, String> = headers
+                .iter()
+                .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.as_str().to_string(), v.to_string())))
+                .collect();
+            let host = headers.get("host").and_then(|v| v.to_str().ok());
+            let (group, rewritten_path) = router.match_route(method.as_str(), path, host, &headers_map);
+            (rewritten_path, Some(group.to_string()))
+        } else {
+            (path.to_string(), None)
+        };
+        let path = routed_path.as_str();
+
         let sticky_backend = if let Some(ref sticky) = self.sticky_sessions {
             if let Some(cookie) = headers.get("cookie").and_then(|v| v.to_str().ok()) {
                 if let Some(session_id) = sticky.extract_session_from_cookie(cookie) {
@@ -305,21 +320,18 @@ impl RequestHandler {
             },
         };
 
-        // Server is selected once; retries go to the same backend
-        server.increment_connections();
-        let backend_addr = server.address();
-
         let body = req.into_body().collect().await?.to_bytes();
-        let target_uri = format!(
-            "http://{}{}",
-            backend_addr,
-            uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/")
-        );
+        let path_query = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
 
         let mut retry_state = RetryState::new();
         let max_attempts = self.retry.as_ref().map(|r| r.max_attempts()).unwrap_or(1);
+        let mut current_server = server;
 
         let response = loop {
+            current_server.increment_connections();
+            let backend_addr = current_server.address();
+            let target_uri = format!("http://{}{}", backend_addr, path_query);
+
             let mut upstream_req = self.http_client.request(
                 method.as_str().parse().unwrap(),
                 &target_uri,
@@ -346,7 +358,16 @@ impl RequestHandler {
 
                     if let Some(ref retry) = self.retry {
                         retry_state.increment(None, Some(status));
-                        if retry.should_retry(retry_state.attempt, Some(status), false) && retry_state.attempt <= max_attempts {
+                        if retry.should_retry(retry_state.attempt, Some(status), false) && retry_state.attempt < max_attempts {
+                            current_server.decrement_connections();
+                            // For 5xx errors, try a different backend
+                            if status >= 500 {
+                                if let Ok(new_server) = self.selector.select(&servers, Some(client_ip)) {
+                                    if new_server.address() != current_server.address() {
+                                        current_server = new_server;
+                                    }
+                                }
+                            }
                             retry.wait(retry_state.attempt).await;
                             continue;
                         }
@@ -355,13 +376,15 @@ impl RequestHandler {
                     self.metrics.increment_successful_requests();
                     let resp_headers = resp.headers().clone();
                     let body_bytes = resp.bytes().await.unwrap_or_default();
+                    let backend_addr = current_server.address();
 
                     if let Some(ref cache) = self.cache {
                         if ResponseCache::should_cache(status, method.as_str()) {
                             if let Some(cc_header) = resp_headers.get("cache-control").and_then(|v| v.to_str().ok()) {
                                 let cc = ResponseCache::parse_cache_control(cc_header);
                                 if !cc.no_store && !cc.private {
-                                    let ttl = cc.s_maxage.or(cc.max_age).unwrap_or(300);
+                                    let ttl_secs = cc.s_maxage.or(cc.max_age).unwrap_or(300);
+                                    let ttl = Duration::from_secs(ttl_secs);
                                     let cached = CachedResponse {
                                         status,
                                         headers: resp_headers.iter()
@@ -372,9 +395,10 @@ impl RequestHandler {
                                             .duration_since(std::time::UNIX_EPOCH)
                                             .unwrap()
                                             .as_secs(),
+                                        ttl,
                                     };
                                     let cache_key = ResponseCache::cache_key(method.as_str(), path, None);
-                                    cache.set_with_ttl(cache_key, cached, Duration::from_secs(ttl)).await;
+                                    cache.set_with_ttl(cache_key, cached, ttl).await;
                                 }
                             }
                         }
@@ -423,22 +447,31 @@ impl RequestHandler {
                     break Ok(builder.body(Full::new(response_body)).unwrap());
                 }
                 Err(e) => {
+                    let failed_backend = current_server.address();
+                    current_server.decrement_connections();
+
                     if let Some(ref retry) = self.retry {
                         retry_state.increment(Some(e.to_string()), None);
-                        if retry.should_retry(retry_state.attempt, None, true) && retry_state.attempt <= max_attempts {
+                        if retry.should_retry(retry_state.attempt, None, true) && retry_state.attempt < max_attempts {
+                            // For connection errors, try a different backend
+                            if let Ok(new_server) = self.selector.select(&servers, Some(client_ip)) {
+                                if new_server.address() != failed_backend {
+                                    current_server = new_server;
+                                }
+                            }
                             retry.wait(retry_state.attempt).await;
                             continue;
                         }
                     }
 
-                    error!("Backend request failed for {}: {}", backend_addr, e);
+                    error!("Backend request failed for {}: {}", failed_backend, e);
                     self.metrics.increment_failed_requests();
                     break Ok(Self::error_response(StatusCode::BAD_GATEWAY, "Backend request failed"));
                 }
             }
         };
 
-        server.decrement_connections();
+        current_server.decrement_connections();
         response
     }
 
