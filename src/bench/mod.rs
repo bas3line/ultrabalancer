@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
-use tracing::{error, info};
+use tracing::info;
 
 pub struct BenchmarkConfig {
     pub target_url: String,

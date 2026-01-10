@@ -1,5 +1,4 @@
 use ipnet::IpNet;
-use std::collections::HashSet;
 use std::net::IpAddr;
 use std::str::FromStr;
 

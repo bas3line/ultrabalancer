@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
@@ -118,15 +117,19 @@ impl AccessLogger {
         let (tx, mut rx) = mpsc::unbounded_channel::<AccessLogEntry>();
 
         tokio::spawn(async move {
-            let mut file = if let Some(path) = output_path {
-                Some(
-                    tokio::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(&path)
-                        .await
-                        .ok(),
-                )
+            let mut file = if let Some(ref path) = output_path {
+                match tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                    .await
+                {
+                    Ok(f) => Some(f),
+                    Err(e) => {
+                        error!("Failed to open access log file '{}': {}, falling back to stdout", path, e);
+                        None
+                    }
+                }
             } else {
                 None
             };
@@ -138,7 +141,7 @@ impl AccessLogger {
                     // LogFormat::Csv => entry.to_csv(),
                 };
 
-                if let Some(Some(ref mut f)) = file {
+                if let Some(ref mut f) = file {
                     if let Err(e) = f.write_all(format!("{}\n", line).as_bytes()).await {
                         error!("Failed to write access log: {}", e);
                     }

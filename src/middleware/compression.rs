@@ -1,5 +1,5 @@
 use async_compression::tokio::bufread::{BrotliEncoder, GzipEncoder, ZstdEncoder};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use std::io::Cursor;
 use tokio::io::AsyncReadExt;
 
@@ -57,12 +57,12 @@ impl CompressionAlgo {
 
 pub struct CompressionMiddleware {
     min_size: usize,
-    level: u32,
+    _level: u32, // async-compression uses default levels; kept for future use
 }
 
 impl CompressionMiddleware {
     pub fn new(min_size: usize, level: u32) -> Self {
-        Self { min_size, level }
+        Self { min_size, _level: level }
     }
 
     pub async fn compress(&self, data: Bytes, algo: CompressionAlgo) -> anyhow::Result<Bytes> {
@@ -119,7 +119,7 @@ impl Clone for CompressionMiddleware {
     fn clone(&self) -> Self {
         Self {
             min_size: self.min_size,
-            level: self.level,
+            _level: self._level,
         }
     }
 }

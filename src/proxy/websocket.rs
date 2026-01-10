@@ -1,13 +1,11 @@
-use bytes::Bytes;
 use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt, StreamExt};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async, tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream,
 };
-use tracing::{debug, error, info};
+use tracing::debug;
 
 static WS_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
 static WS_MESSAGES: AtomicU64 = AtomicU64::new(0);

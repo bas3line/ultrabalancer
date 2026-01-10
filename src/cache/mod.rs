@@ -63,7 +63,7 @@ impl ResponseCache {
         self.cache.insert(key, Arc::new(response)).await;
     }
 
-    pub async fn set_with_ttl(&self, key: u64, response: CachedResponse, ttl: Duration) {
+    pub async fn set_with_ttl(&self, key: u64, response: CachedResponse, _ttl: Duration) {
         self.cache.insert(key, Arc::new(response)).await;
     }
 
@@ -71,9 +71,10 @@ impl ResponseCache {
         self.cache.invalidate(&key).await;
     }
 
-    pub async fn invalidate_prefix(&self, prefix: &str) {
-        let prefix_hash = xxh3_64(prefix.as_bytes());
-        self.cache.invalidate(&prefix_hash).await;
+    /// Invalidates a cache entry by string key (hashes the string to get the key)
+    pub async fn invalidate_by_str(&self, key_str: &str) {
+        let key = xxh3_64(key_str.as_bytes());
+        self.cache.invalidate(&key).await;
     }
 
     pub async fn clear(&self) {

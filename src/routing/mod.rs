@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct Route {
@@ -71,9 +70,19 @@ impl Route {
         }
 
         if let Some(ref required_host) = self.host {
-            match host {
-                Some(h) if h == required_host || h.ends_with(&format!(".{}", required_host)) => {}
-                _ => return false,
+            let matches = match host {
+                Some(h) => {
+                    h == required_host || {
+                        // Proper subdomain check: must have dot before the required_host
+                        h.len() > required_host.len() + 1
+                            && h.ends_with(required_host)
+                            && h.as_bytes()[h.len() - required_host.len() - 1] == b'.'
+                    }
+                }
+                None => false,
+            };
+            if !matches {
+                return false;
             }
         }
 

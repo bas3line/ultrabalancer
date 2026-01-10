@@ -8,7 +8,7 @@ use hyper_util::rt::TokioExecutor;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 type HttpClient = Client<hyper_util::client::legacy::connect::HttpConnector, Full<Bytes>>;
 
@@ -80,21 +80,23 @@ impl ConnectionPool {
             .clone()
     }
 
-    pub async fn acquire(&self, backend: &str) -> Option<Arc<Semaphore>> {
+    /// Returns an owned permit that auto-releases when dropped
+    pub fn acquire(&self, backend: &str) -> Option<OwnedSemaphorePermit> {
         let sem = self
             .semaphores
             .entry(backend.to_string())
             .or_insert_with(|| Arc::new(Semaphore::new(self.max_per_backend)))
             .clone();
 
-        if sem.try_acquire().is_ok() {
-            self.active_connections
-                .entry(backend.to_string())
-                .or_insert_with(|| Arc::new(AtomicU64::new(0)))
-                .fetch_add(1, Ordering::Relaxed);
-            Some(sem)
-        } else {
-            None
+        match sem.try_acquire_owned() {
+            Ok(permit) => {
+                self.active_connections
+                    .entry(backend.to_string())
+                    .or_insert_with(|| Arc::new(AtomicU64::new(0)))
+                    .fetch_add(1, Ordering::Relaxed);
+                Some(permit)
+            }
+            Err(_) => None,
         }
     }
 
@@ -102,6 +104,7 @@ impl ConnectionPool {
         if let Some(counter) = self.active_connections.get(backend) {
             counter.fetch_sub(1, Ordering::Relaxed);
         }
+        // Note: semaphore permit is released automatically when OwnedSemaphorePermit is dropped
     }
 
     pub fn active_count(&self, backend: &str) -> u64 {

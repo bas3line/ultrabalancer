@@ -2,9 +2,7 @@ use bytes::Bytes;
 use http_body_util::Full;
 use hyper::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendInfo {

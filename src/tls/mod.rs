@@ -3,7 +3,6 @@ use rustls::ServerConfig;
 use rustls_pemfile::{certs, private_key};
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
 use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
 

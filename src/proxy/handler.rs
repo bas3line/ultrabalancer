@@ -1,6 +1,6 @@
-use crate::backend::{Server, ServerPool};
+use crate::backend::ServerPool;
 use crate::balancer::LoadBalancerSelector;
-use crate::cache::{CacheControl, CachedResponse, ResponseCache};
+use crate::cache::{CachedResponse, ResponseCache};
 use crate::metrics::{MetricsCollector, MetricsExporter};
 use crate::middleware::{AccessLogEntry, AccessLogger, CompressionAlgo, CompressionMiddleware, IpFilter, RetryMiddleware, RetryState};
 use crate::routing::Router;
@@ -13,6 +13,7 @@ use hyper::{Request, Response, StatusCode};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::time::timeout;
 use tracing::{error, warn};
 
 pub struct RequestHandler {
@@ -141,7 +142,7 @@ impl RequestHandler {
             shutdown.connection_started();
         }
 
-        let mut log_entry = if self.access_logger.is_some() {
+        let log_entry = if self.access_logger.is_some() {
             Some(AccessLogEntry::new(
                 client_addr,
                 req.method().as_str(),
@@ -215,7 +216,17 @@ impl RequestHandler {
             }
         }
 
-        let response = self.proxy_request(req, &client_ip, &request_id, compression_algo).await;
+        let response = match timeout(
+            self.request_timeout,
+            self.proxy_request(req, &client_ip, &request_id, compression_algo),
+        ).await {
+            Ok(res) => res,
+            Err(_) => {
+                warn!("Request timeout after {:?}", self.request_timeout);
+                self.metrics.increment_failed_requests();
+                Ok(Self::error_response(StatusCode::GATEWAY_TIMEOUT, "Request timeout"))
+            }
+        };
 
         let duration = start.elapsed();
         self.metrics.record_response_time(duration);
@@ -226,6 +237,7 @@ impl RequestHandler {
 
         if let Some(entry) = log_entry {
             let status = response.as_ref().map(|r| r.status().as_u16()).unwrap_or(500);
+            // Note: bytes_sent is body size only, excludes HTTP headers
             let bytes = response.as_ref().map(|r| r.body().size_hint().exact().unwrap_or(0)).unwrap_or(0);
             let entry = entry.complete(status, bytes, duration, None);
             if let Some(ref logger) = self.access_logger {
@@ -293,6 +305,7 @@ impl RequestHandler {
             },
         };
 
+        // Server is selected once; retries go to the same backend
         server.increment_connections();
         let backend_addr = server.address();
 
@@ -314,7 +327,7 @@ impl RequestHandler {
 
             for (name, value) in headers.iter() {
                 if let Ok(val) = value.to_str() {
-                    if !matches!(name.as_str(), "host" | "connection" | "keep-alive" | "transfer-encoding") {
+                    if !matches!(name.as_str(), "host" | "connection" | "keep-alive" | "transfer-encoding" | "content-length") {
                         upstream_req = upstream_req.header(name.as_str(), val);
                     }
                 }
@@ -324,16 +337,16 @@ impl RequestHandler {
                 .header("X-Forwarded-For", client_ip)
                 .header("X-Real-IP", client_ip)
                 .header("X-Request-ID", request_id)
-                .header("Host", backend_addr.split(':').next().unwrap_or(&backend_addr))
-                .body(body.to_vec());
+                .header("Host", &backend_addr)
+                .body(body.clone());
 
             match upstream_req.send().await {
                 Ok(resp) => {
                     let status = resp.status().as_u16();
 
                     if let Some(ref retry) = self.retry {
-                        if retry.should_retry(retry_state.attempt, Some(status), false) && retry_state.attempt < max_attempts {
-                            retry_state.increment(None, Some(status));
+                        retry_state.increment(None, Some(status));
+                        if retry.should_retry(retry_state.attempt, Some(status), false) && retry_state.attempt <= max_attempts {
                             retry.wait(retry_state.attempt).await;
                             continue;
                         }
@@ -411,8 +424,8 @@ impl RequestHandler {
                 }
                 Err(e) => {
                     if let Some(ref retry) = self.retry {
-                        if retry.should_retry(retry_state.attempt, None, true) && retry_state.attempt < max_attempts {
-                            retry_state.increment(Some(e.to_string()), None);
+                        retry_state.increment(Some(e.to_string()), None);
+                        if retry.should_retry(retry_state.attempt, None, true) && retry_state.attempt <= max_attempts {
                             retry.wait(retry_state.attempt).await;
                             continue;
                         }

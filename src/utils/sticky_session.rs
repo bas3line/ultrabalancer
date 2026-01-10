@@ -2,7 +2,7 @@ use ahash::AHashMap;
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use xxhash_rust::xxh3::xxh3_64;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct SessionEntry {
@@ -56,9 +56,7 @@ impl StickySessionManager {
     }
 
     pub fn generate_session_id(&self) -> String {
-        let random_bytes: [u8; 16] = std::array::from_fn(|_| fastrand::u8(..));
-        let hash = xxh3_64(&random_bytes);
-        format!("{:016x}", hash)
+        Uuid::new_v4().simple().to_string()
     }
 
     pub fn extract_session_from_cookie(&self, cookie_header: &str) -> Option<String> {

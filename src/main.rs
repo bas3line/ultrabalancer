@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod admin;
 mod backend;
 mod balancer;
