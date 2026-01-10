@@ -1,9 +1,15 @@
+mod admin;
 mod backend;
 mod balancer;
+mod bench;
+mod cache;
 mod config;
 mod error;
 mod metrics;
+mod middleware;
 mod proxy;
+mod routing;
+mod tls;
 mod utils;
 
 use crate::backend::{HealthChecker, Server, ServerPool};
