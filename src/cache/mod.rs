@@ -13,6 +13,9 @@ pub struct CachedResponse {
     pub body: Bytes,
     pub created_at: u64,
     pub ttl: Duration,
+    /// Content-Encoding of the cached body (e.g., "gzip", "br").
+    /// None means the body is uncompressed.
+    pub content_encoding: Option<String>,
 }
 
 struct PerEntryExpiry;
@@ -98,7 +101,12 @@ impl ResponseCache {
         self.cache.insert(key, Arc::new(response)).await;
     }
 
-    pub async fn set_with_ttl(&self, key: u64, response: CachedResponse, _ttl: Duration) {
+    /// Set a cached response with a specific TTL.
+    /// The TTL is stored in the CachedResponse and used by PerEntryExpiry.
+    /// Note: The `ttl` parameter is used to set `response.ttl` if not already set.
+    pub async fn set_with_ttl(&self, key: u64, mut response: CachedResponse, ttl: Duration) {
+        // Ensure the response has the correct TTL for the per-entry expiry
+        response.ttl = ttl;
         self.cache.insert(key, Arc::new(response)).await;
     }
 
@@ -106,7 +114,8 @@ impl ResponseCache {
         self.cache.invalidate(&key).await;
     }
 
-    /// Invalidates a cache entry by string key (hashes the string to get the key)
+    /// Invalidates a cache entry by string key (hashes the string to get the key).
+    /// Note: This invalidates the exact hashed key, not a pattern/prefix match.
     pub async fn invalidate_by_str(&self, key_str: &str) {
         let key = xxh3_64(key_str.as_bytes());
         self.cache.invalidate(&key).await;

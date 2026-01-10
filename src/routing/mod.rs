@@ -72,11 +72,12 @@ impl Route {
         if let Some(ref required_host) = self.host {
             let matches = match host {
                 Some(h) => {
+                    // Exact match
                     h == required_host || {
-                        // Proper subdomain check: must have dot before the required_host
-                        h.len() > required_host.len() + 1
-                            && h.ends_with(required_host)
-                            && h.as_bytes()[h.len() - required_host.len() - 1] == b'.'
+                        // Subdomain match: h must be "subdomain.required_host"
+                        // Ensure there's a dot separator to prevent "evilexample.com" matching "example.com"
+                        let suffix = format!(".{}", required_host);
+                        h.ends_with(&suffix)
                     }
                 }
                 None => false,

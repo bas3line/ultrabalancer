@@ -326,9 +326,13 @@ impl RequestHandler {
         let mut retry_state = RetryState::new();
         let max_attempts = self.retry.as_ref().map(|r| r.max_attempts()).unwrap_or(1);
         let mut current_server = server;
+        // Tracks if we need to decrement connections after the loop exits
+        #[allow(unused_assignments)]
+        let mut connection_incremented = false;
 
         let response = loop {
             current_server.increment_connections();
+            connection_incremented = true;
             let backend_addr = current_server.address();
             let target_uri = format!("http://{}{}", backend_addr, path_query);
 
@@ -360,6 +364,8 @@ impl RequestHandler {
                         retry_state.increment(None, Some(status));
                         if retry.should_retry(retry_state.attempt, Some(status), false) && retry_state.attempt < max_attempts {
                             current_server.decrement_connections();
+                            #[allow(unused_assignments)]
+                            { connection_incremented = false; }
                             // For 5xx errors, try a different backend
                             if status >= 500 {
                                 if let Ok(new_server) = self.selector.select(&servers, Some(client_ip)) {
@@ -377,6 +383,11 @@ impl RequestHandler {
                     let resp_headers = resp.headers().clone();
                     let body_bytes = resp.bytes().await.unwrap_or_default();
                     let backend_addr = current_server.address();
+
+                    // Track if upstream already compressed the response
+                    let upstream_encoding = resp_headers.get(CONTENT_ENCODING)
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.to_string());
 
                     if let Some(ref cache) = self.cache {
                         if ResponseCache::should_cache(status, method.as_str()) {
@@ -396,6 +407,7 @@ impl RequestHandler {
                                             .unwrap()
                                             .as_secs(),
                                         ttl,
+                                        content_encoding: upstream_encoding.clone(),
                                     };
                                     let cache_key = ResponseCache::cache_key(method.as_str(), path, None);
                                     cache.set_with_ttl(cache_key, cached, ttl).await;
@@ -407,13 +419,16 @@ impl RequestHandler {
                     let mut response_body = body_bytes;
                     let mut encoding_header = None;
 
-                    if let Some(ref compressor) = self.compression {
-                        if let Some(content_type) = resp_headers.get(CONTENT_TYPE).and_then(|v| v.to_str().ok()) {
-                            if CompressionMiddleware::should_compress(Some(content_type)) {
-                                if let Ok(compressed) = compressor.compress(response_body.clone(), compression_algo).await {
-                                    if compressed.len() < response_body.len() {
-                                        response_body = compressed;
-                                        encoding_header = compression_algo.content_encoding();
+                    // Only compress if upstream didn't already compress
+                    if upstream_encoding.is_none() {
+                        if let Some(ref compressor) = self.compression {
+                            if let Some(content_type) = resp_headers.get(CONTENT_TYPE).and_then(|v| v.to_str().ok()) {
+                                if CompressionMiddleware::should_compress(Some(content_type)) {
+                                    if let Ok(compressed) = compressor.compress(response_body.clone(), compression_algo).await {
+                                        if compressed.len() < response_body.len() {
+                                            response_body = compressed;
+                                            encoding_header = compression_algo.content_encoding();
+                                        }
                                     }
                                 }
                             }
@@ -449,6 +464,7 @@ impl RequestHandler {
                 Err(e) => {
                     let failed_backend = current_server.address();
                     current_server.decrement_connections();
+                    connection_incremented = false;
 
                     if let Some(ref retry) = self.retry {
                         retry_state.increment(Some(e.to_string()), None);
@@ -471,7 +487,10 @@ impl RequestHandler {
             }
         };
 
-        current_server.decrement_connections();
+        // Only decrement if we haven't already decremented in a retry/error path
+        if connection_incremented {
+            current_server.decrement_connections();
+        }
         response
     }
 
@@ -483,16 +502,19 @@ impl RequestHandler {
         let mut response_body = cached.body.clone();
         let mut encoding_header = None;
 
-        if let Some(ref compressor) = self.compression {
-            let content_type = cached.headers.iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
-                .map(|(_, v)| v.as_str());
+        // Only compress if the cached response wasn't already compressed
+        if cached.content_encoding.is_none() {
+            if let Some(ref compressor) = self.compression {
+                let content_type = cached.headers.iter()
+                    .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+                    .map(|(_, v)| v.as_str());
 
-            if CompressionMiddleware::should_compress(content_type) {
-                if let Ok(compressed) = compressor.compress(response_body.clone(), compression_algo).await {
-                    if compressed.len() < response_body.len() {
-                        response_body = compressed;
-                        encoding_header = compression_algo.content_encoding();
+                if CompressionMiddleware::should_compress(content_type) {
+                    if let Ok(compressed) = compressor.compress(response_body.clone(), compression_algo).await {
+                        if compressed.len() < response_body.len() {
+                            response_body = compressed;
+                            encoding_header = compression_algo.content_encoding();
+                        }
                     }
                 }
             }
@@ -501,7 +523,9 @@ impl RequestHandler {
         let mut builder = Response::builder().status(cached.status);
 
         for (name, value) in &cached.headers {
-            if name != "transfer-encoding" && name != "content-length" {
+            // Skip content-encoding if we're going to add our own
+            if name != "transfer-encoding" && name != "content-length" 
+                && !(name.eq_ignore_ascii_case("content-encoding") && encoding_header.is_some()) {
                 builder = builder.header(name.as_str(), value.as_str());
             }
         }

@@ -16,10 +16,15 @@ use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
+/// HTTP version mode for the proxy server.
 #[derive(Clone)]
 pub enum HttpVersion {
+    /// HTTP/1.1 only
     Http1Only,
+    /// HTTP/2 only (h2c - cleartext HTTP/2)
     Http2Only,
+    /// HTTP/1.1 with upgrade support (WebSocket).
+    /// Note: This does NOT negotiate HTTP/2 via ALPN; for HTTP/2 use Http2Only or TLS with ALPN.
     Auto,
 }
 
@@ -167,8 +172,8 @@ impl ProxyServer {
 
         let http_ver = match &self.http_version {
             HttpVersion::Http1Only => "HTTP/1.1",
-            HttpVersion::Http2Only => "HTTP/2",
-            HttpVersion::Auto => "HTTP/1.1 + HTTP/2",
+            HttpVersion::Http2Only => "HTTP/2 (h2c)",
+            HttpVersion::Auto => "HTTP/1.1 with WebSocket upgrades",
         };
         info!("Protocol: {}", http_ver);
 

@@ -1,8 +1,14 @@
 use std::time::Duration;
 use tokio::time::sleep;
 
+/// Configuration for retry behavior.
+/// 
+/// `max_attempts` defines the maximum number of total attempts (including the initial request).
+/// For example, `max_attempts = 3` means: 1 initial request + up to 2 retries.
 #[derive(Clone)]
 pub struct RetryConfig {
+    /// Maximum total attempts including the initial request.
+    /// e.g., max_attempts=3 means initial request + 2 retries max.
     pub max_attempts: u32,
     pub initial_delay_ms: u64,
     pub max_delay_ms: u64,
@@ -33,7 +39,13 @@ impl RetryMiddleware {
         Self { config }
     }
 
+    /// Determines if a retry should be attempted.
+    /// 
+    /// `attempt` is the current attempt number (1-indexed after increment).
+    /// Returns true if retry is warranted and we haven't exceeded max_attempts.
     pub fn should_retry(&self, attempt: u32, status: Option<u16>, is_error: bool) -> bool {
+        // attempt is 1-indexed (incremented before calling should_retry)
+        // max_attempts includes the initial request, so we can retry while attempt < max_attempts
         if attempt >= self.config.max_attempts {
             return false;
         }
