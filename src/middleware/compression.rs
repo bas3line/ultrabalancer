@@ -12,6 +12,20 @@ pub enum CompressionAlgo {
 }
 
 impl CompressionAlgo {
+    /// Returns the compression efficiency priority (higher = better compression)
+    fn priority(enc: &str) -> u8 {
+        match enc {
+            "br" => 3,      // Brotli - best compression ratio
+            "zstd" => 2,    // Zstd - excellent speed/ratio balance
+            "gzip" => 1,    // Gzip - widely compatible
+            "deflate" => 1, // Deflate - similar to gzip
+            _ => 0,
+        }
+    }
+
+    /// Parses Accept-Encoding header and selects the best compression algorithm.
+    /// When multiple encodings have the same quality value, prefers the more efficient one
+    /// (brotli > zstd > gzip).
     pub fn from_accept_encoding(header: &str) -> Self {
         let encodings: Vec<(&str, f32)> = header
             .split(',')
@@ -27,13 +41,17 @@ impl CompressionAlgo {
             })
             .collect();
 
-        let mut best = ("", 0.0f32);
+        let mut best: (&str, f32) = ("", -1.0);
         for (enc, q) in encodings {
-            if q > best.1 {
-                match enc {
-                    "br" | "zstd" | "gzip" | "deflate" => best = (enc, q),
-                    _ => {}
-                }
+            // Only consider supported encodings
+            let priority = Self::priority(enc);
+            if priority == 0 {
+                continue;
+            }
+
+            // Select if: higher quality, OR same quality but better compression algorithm
+            if q > best.1 || (q == best.1 && priority > Self::priority(best.0)) {
+                best = (enc, q);
             }
         }
 

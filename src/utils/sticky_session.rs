@@ -15,6 +15,8 @@ pub struct StickySessionManager {
     sessions: DashMap<String, SessionEntry>,
     cookie_name: String,
     ttl: Duration,
+    /// If true, cookies will include the Secure flag (for TLS deployments)
+    secure_cookies: bool,
 }
 
 impl StickySessionManager {
@@ -23,7 +25,14 @@ impl StickySessionManager {
             sessions: DashMap::new(),
             cookie_name: cookie_name.to_string(),
             ttl: Duration::from_secs(ttl_secs),
+            secure_cookies: false,
         }
+    }
+
+    /// Enable Secure flag on cookies (should be true when TLS is enabled)
+    pub fn with_secure_cookies(mut self, secure: bool) -> Self {
+        self.secure_cookies = secure;
+        self
     }
 
     pub fn get_backend(&self, session_id: &str) -> Option<String> {
@@ -69,13 +78,28 @@ impl StickySessionManager {
         None
     }
 
+    /// Creates a session cookie. Includes Secure flag if `secure_cookies` is enabled.
     pub fn create_cookie(&self, session_id: &str) -> String {
-        format!(
-            "{}={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
-            self.cookie_name,
-            session_id,
-            self.ttl.as_secs()
-        )
+        if self.secure_cookies {
+            format!(
+                "{}={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age={}",
+                self.cookie_name,
+                session_id,
+                self.ttl.as_secs()
+            )
+        } else {
+            format!(
+                "{}={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
+                self.cookie_name,
+                session_id,
+                self.ttl.as_secs()
+            )
+        }
+    }
+
+    /// Returns whether secure cookies are enabled
+    pub fn is_secure(&self) -> bool {
+        self.secure_cookies
     }
 
     pub fn cookie_name(&self) -> &str {
@@ -108,6 +132,7 @@ impl Clone for StickySessionManager {
             sessions: self.sessions.clone(),
             cookie_name: self.cookie_name.clone(),
             ttl: self.ttl,
+            secure_cookies: self.secure_cookies,
         }
     }
 }
