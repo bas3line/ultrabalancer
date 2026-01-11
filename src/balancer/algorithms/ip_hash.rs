@@ -1,8 +1,9 @@
 use crate::backend::server::Server;
 use crate::error::Result;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use xxhash_rust::xxh3::xxh3_64;
 
+/// IP hash selector for sticky sessions based on client IP.
+/// Uses xxHash for fast, consistent hashing.
 pub struct IpHashSelector;
 
 impl IpHashSelector {
@@ -15,11 +16,10 @@ impl IpHashSelector {
             return Err(crate::error::LoadBalancerError::NoHealthyBackends);
         }
 
-        let mut hasher = DefaultHasher::new();
-        client_ip.hash(&mut hasher);
-        let hash = hasher.finish();
-
+        // Use xxHash for faster hashing than DefaultHasher
+        let hash = xxh3_64(client_ip.as_bytes());
         let index = (hash as usize) % servers.len();
+        
         Ok(servers[index].clone())
     }
 }
@@ -27,5 +27,11 @@ impl IpHashSelector {
 impl Clone for IpHashSelector {
     fn clone(&self) -> Self {
         Self
+    }
+}
+
+impl Default for IpHashSelector {
+    fn default() -> Self {
+        Self::new()
     }
 }

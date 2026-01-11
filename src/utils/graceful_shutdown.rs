@@ -40,7 +40,11 @@ impl GracefulShutdown {
     }
 
     pub fn connection_ended(&self) {
-        self.active_connections.fetch_sub(1, Ordering::Relaxed);
+        let _ = self.active_connections.fetch_update(
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+            |current| current.checked_sub(1),
+        );
     }
 
     pub fn active_connections(&self) -> usize {

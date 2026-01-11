@@ -109,7 +109,12 @@ impl Server {
     }
 
     pub fn decrement_connections(&self) {
-        self.active_connections.fetch_sub(1, Ordering::Relaxed);
+        // Use fetch_update to prevent underflow
+        let _ = self.active_connections.fetch_update(
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+            |current| current.checked_sub(1),
+        );
     }
 
     pub fn connection_count(&self) -> u32 {

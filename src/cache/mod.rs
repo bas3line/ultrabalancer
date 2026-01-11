@@ -57,6 +57,7 @@ pub struct ResponseCache {
     hits: AtomicU64,
     misses: AtomicU64,
     max_size: u64,
+    /// Default TTL used when caching responses without explicit Cache-Control
     default_ttl: Duration,
 }
 
@@ -97,7 +98,9 @@ impl ResponseCache {
         }
     }
 
-    pub async fn set(&self, key: u64, response: CachedResponse) {
+    /// Set a cached response using the cache's default TTL.
+    pub async fn set(&self, key: u64, mut response: CachedResponse) {
+        response.ttl = self.default_ttl;
         self.cache.insert(key, Arc::new(response)).await;
     }
 

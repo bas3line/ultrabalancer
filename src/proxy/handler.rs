@@ -1,4 +1,4 @@
-use crate::backend::ServerPool;
+use crate::backend::{Server, ServerPool};
 use crate::balancer::LoadBalancerSelector;
 use crate::cache::{CachedResponse, ResponseCache};
 use crate::metrics::{MetricsCollector, MetricsExporter};
@@ -326,13 +326,12 @@ impl RequestHandler {
         let mut retry_state = RetryState::new();
         let max_attempts = self.retry.as_ref().map(|r| r.max_attempts()).unwrap_or(1);
         let mut current_server = server;
-        // Tracks if we need to decrement connections after the loop exits
-        #[allow(unused_assignments)]
-        let mut connection_incremented = false;
+        // Track which server needs connection decremented at end (set inside loop)
+        let mut server_to_decrement: Option<Server>;
 
         let response = loop {
             current_server.increment_connections();
-            connection_incremented = true;
+            server_to_decrement = Some(current_server.clone());
             let backend_addr = current_server.address();
             let target_uri = format!("http://{}{}", backend_addr, path_query);
 
@@ -363,9 +362,10 @@ impl RequestHandler {
                     if let Some(ref retry) = self.retry {
                         retry_state.increment(None, Some(status));
                         if retry.should_retry(retry_state.attempt, Some(status), false) && retry_state.attempt < max_attempts {
-                            current_server.decrement_connections();
-                            #[allow(unused_assignments)]
-                            { connection_incremented = false; }
+                            // Decrement and clear the tracked server before retry
+                            if let Some(s) = server_to_decrement.take() {
+                                s.decrement_connections();
+                            }
                             // For 5xx errors, try a different backend
                             if status >= 500 {
                                 if let Ok(new_server) = self.selector.select(&servers, Some(client_ip)) {
@@ -463,8 +463,10 @@ impl RequestHandler {
                 }
                 Err(e) => {
                     let failed_backend = current_server.address();
-                    current_server.decrement_connections();
-                    connection_incremented = false;
+                    // Decrement and clear the tracked server
+                    if let Some(s) = server_to_decrement.take() {
+                        s.decrement_connections();
+                    }
 
                     if let Some(ref retry) = self.retry {
                         retry_state.increment(Some(e.to_string()), None);
@@ -487,9 +489,9 @@ impl RequestHandler {
             }
         };
 
-        // Only decrement if we haven't already decremented in a retry/error path
-        if connection_incremented {
-            current_server.decrement_connections();
+        // Decrement connection count for the server that handled the final request
+        if let Some(server) = server_to_decrement {
+            server.decrement_connections();
         }
         response
     }

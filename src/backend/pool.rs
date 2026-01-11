@@ -2,11 +2,14 @@ use super::server::{Server, ServerStatus};
 use crate::error::{LoadBalancerError, Result};
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
+use parking_lot::Mutex;
 use std::sync::Arc;
 
 pub struct ServerPool {
     servers: Arc<ArcSwap<Vec<Server>>>,
     server_map: Arc<DashMap<String, Server>>,
+    /// Lock for mutating operations to prevent TOCTOU races
+    mutation_lock: Arc<Mutex<()>>,
 }
 
 impl ServerPool {
@@ -19,6 +22,7 @@ impl ServerPool {
         Self {
             servers: Arc::new(ArcSwap::from_pointee(servers)),
             server_map: Arc::new(server_map),
+            mutation_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -70,16 +74,30 @@ impl ServerPool {
         }
     }
 
-    pub fn add_server(&self, server: Server) {
+    /// Add a server to the pool. Thread-safe.
+    /// Returns true if server was added, false if it already exists.
+    pub fn add_server(&self, server: Server) -> bool {
+        let _guard = self.mutation_lock.lock();
+        
         let id = server.id.clone();
+        
+        // Idempotent: skip if already exists
+        if self.server_map.contains_key(&id) {
+            return false;
+        }
+        
         self.server_map.insert(id, server.clone());
 
         let mut servers = self.servers.load().as_ref().clone();
         servers.push(server);
         self.servers.store(Arc::new(servers));
+        true
     }
 
+    /// Remove a server from the pool. Thread-safe.
     pub fn remove_server(&self, id: &str) -> Result<()> {
+        let _guard = self.mutation_lock.lock();
+        
         self.server_map
             .remove(id)
             .ok_or_else(|| LoadBalancerError::InvalidBackendAddress(id.to_string()))?;
@@ -118,6 +136,7 @@ impl Clone for ServerPool {
         Self {
             servers: Arc::clone(&self.servers),
             server_map: Arc::clone(&self.server_map),
+            mutation_lock: Arc::clone(&self.mutation_lock),
         }
     }
 }

@@ -13,13 +13,8 @@ impl RandomSelector {
             return Err(crate::error::LoadBalancerError::NoHealthyBackends);
         }
 
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-
-        let index = (nanos as usize) % servers.len();
+        // Use fastrand for proper randomness (thread-local RNG)
+        let index = fastrand::usize(..servers.len());
         Ok(servers[index].clone())
     }
 }
@@ -27,5 +22,11 @@ impl RandomSelector {
 impl Clone for RandomSelector {
     fn clone(&self) -> Self {
         Self
+    }
+}
+
+impl Default for RandomSelector {
+    fn default() -> Self {
+        Self::new()
     }
 }
