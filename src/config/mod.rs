@@ -49,17 +49,12 @@ pub struct BackendConfig {
     pub max_connections: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(untagged)]
 pub enum WorkerConfig {
+    #[default]
     Auto,
     Count(usize),
-}
-
-impl Default for WorkerConfig {
-    fn default() -> Self {
-        WorkerConfig::Auto
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

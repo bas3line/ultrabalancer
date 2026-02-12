@@ -82,7 +82,7 @@ impl WeightedRoundRobinSelector {
             .iter()
             .map(|s| s.weight as i32)
             .filter(|&w| w > 0)
-            .fold(0, |acc, w| gcd(acc, w))
+            .fold(0, gcd)
             .max(1)
     }
 }

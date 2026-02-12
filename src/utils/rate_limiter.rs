@@ -76,7 +76,7 @@ impl RateLimiter {
             let entry = map
                 .entry(ip.to_string())
                 .or_insert_with(|| IpLimiterEntry {
-                    limiter: Arc::new(GovernorRateLimiter::direct(quota.clone())),
+                    limiter: Arc::new(GovernorRateLimiter::direct(*quota)),
                     last_access: AtomicU64::new(Self::current_time_secs()),
                 });
             entry.last_access.store(Self::current_time_secs(), Ordering::Relaxed);
@@ -97,7 +97,7 @@ impl RateLimiter {
             let entry = map
                 .entry(ip.to_string())
                 .or_insert_with(|| IpLimiterEntry {
-                    limiter: Arc::new(GovernorRateLimiter::direct(quota.clone())),
+                    limiter: Arc::new(GovernorRateLimiter::direct(*quota)),
                     last_access: AtomicU64::new(Self::current_time_secs()),
                 });
             entry.last_access.store(Self::current_time_secs(), Ordering::Relaxed);
@@ -140,7 +140,7 @@ impl Clone for RateLimiter {
         Self {
             global: Arc::clone(&self.global),
             per_ip: self.per_ip.as_ref().map(Arc::clone),
-            per_ip_quota: self.per_ip_quota.clone(),
+            per_ip_quota: self.per_ip_quota,
         }
     }
 }

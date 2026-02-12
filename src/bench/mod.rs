@@ -49,7 +49,7 @@ impl std::fmt::Display for BenchmarkResults {
         writeln!(f, "Failed:             {}", self.failed)?;
         writeln!(f, "Duration:           {:.2}s", self.duration.as_secs_f64())?;
         writeln!(f, "Requests/sec:       {:.2}", self.requests_per_second)?;
-        writeln!(f, "")?;
+        writeln!(f)?;
         writeln!(f, "Latency Statistics:")?;
         writeln!(f, "  Avg:              {:.2}ms", self.avg_latency_ms)?;
         writeln!(f, "  Min:              {:.2}ms", self.min_latency_ms)?;
@@ -177,7 +177,7 @@ pub async fn run_benchmark(config: BenchmarkConfig) -> anyhow::Result<BenchmarkR
 pub async fn stress_test(target: &str, target_rps: u64, duration_secs: u64) -> anyhow::Result<BenchmarkResults> {
     info!("Starting stress test: target {}+ RPS for {}s", target_rps, duration_secs);
 
-    let concurrency = (target_rps / 100).max(500).min(10000) as usize;
+    let concurrency = (target_rps / 100).clamp(500, 10000) as usize;
 
     let config = BenchmarkConfig {
         target_url: target.to_string(),
