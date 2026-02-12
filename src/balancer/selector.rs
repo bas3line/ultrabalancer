@@ -9,6 +9,8 @@ pub enum Algorithm {
     IpHash,
     Random,
     WeightedRoundRobin,
+    PowerOfTwo,
+    FastestResponse,
 }
 
 impl Algorithm {
@@ -19,6 +21,8 @@ impl Algorithm {
             "ip-hash" | "iphash" | "hash" => Some(Algorithm::IpHash),
             "random" | "rand" => Some(Algorithm::Random),
             "weighted" | "weighted-round-robin" | "wrr" => Some(Algorithm::WeightedRoundRobin),
+            "power-of-two" | "poweroftwo" | "pot" => Some(Algorithm::PowerOfTwo),
+            "fastest-response" | "fastest" | "fr" => Some(Algorithm::FastestResponse),
             _ => None,
         }
     }
@@ -30,6 +34,8 @@ impl Algorithm {
             Algorithm::IpHash => "ip-hash",
             Algorithm::Random => "random",
             Algorithm::WeightedRoundRobin => "weighted",
+            Algorithm::PowerOfTwo => "power-of-two",
+            Algorithm::FastestResponse => "fastest-response",
         }
     }
 }
@@ -41,14 +47,14 @@ pub enum LoadBalancerSelector {
     IpHash(IpHashSelector),
     Random(RandomSelector),
     WeightedRoundRobin(WeightedRoundRobinSelector),
+    PowerOfTwo(PowerOfTwoSelector),
+    FastestResponse(FastestResponseSelector),
 }
 
 impl LoadBalancerSelector {
     pub fn new(algorithm: Algorithm) -> Self {
         match algorithm {
-            Algorithm::RoundRobin => {
-                LoadBalancerSelector::RoundRobin(RoundRobinSelector::new())
-            }
+            Algorithm::RoundRobin => LoadBalancerSelector::RoundRobin(RoundRobinSelector::new()),
             Algorithm::LeastConnections => {
                 LoadBalancerSelector::LeastConnections(LeastConnectionsSelector::new())
             }
@@ -56,6 +62,10 @@ impl LoadBalancerSelector {
             Algorithm::Random => LoadBalancerSelector::Random(RandomSelector::new()),
             Algorithm::WeightedRoundRobin => {
                 LoadBalancerSelector::WeightedRoundRobin(WeightedRoundRobinSelector::new())
+            }
+            Algorithm::PowerOfTwo => LoadBalancerSelector::PowerOfTwo(PowerOfTwoSelector::new()),
+            Algorithm::FastestResponse => {
+                LoadBalancerSelector::FastestResponse(FastestResponseSelector::new())
             }
         }
     }
@@ -70,6 +80,8 @@ impl LoadBalancerSelector {
             }
             LoadBalancerSelector::Random(selector) => selector.select(servers),
             LoadBalancerSelector::WeightedRoundRobin(selector) => selector.select(servers),
+            LoadBalancerSelector::PowerOfTwo(selector) => selector.select(servers),
+            LoadBalancerSelector::FastestResponse(selector) => selector.select(servers),
         }
     }
 }

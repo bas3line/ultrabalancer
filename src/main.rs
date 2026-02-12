@@ -382,7 +382,9 @@ fn execute_info() {
     println!("  • least-connections - Route to server with fewest connections");
     println!("  • ip-hash          - Consistent hashing based on client IP");
     println!("  • random           - Random distribution");
-    println!("  • weighted         - Weight-based round robin\n");
+    println!("  • weighted         - Weight-based round robin");
+    println!("  • power-of-two     - Select two random servers, use the least loaded");
+    println!("  • fastest-response - Route to server with fastest recent response\n");
     println!("Features:");
     println!("  • Automatic health checking");
     println!("  • Real-time metrics (/metrics, /prometheus endpoints)");
