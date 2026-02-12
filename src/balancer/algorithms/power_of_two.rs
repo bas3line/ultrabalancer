@@ -11,6 +11,15 @@ impl PowerOfTwoSelector {
         Self
     }
 
+    // pub fn select(&self, servers: &[Server]) -> Result<Server> {
+    //     if servers.is_empty() {
+    //         return Err(crate::error::LoadBalancerError::NoHealthyBackends);
+    //     }
+    //
+    //     let idx = fastrand::usize(..servers.len());
+    //     Ok(servers[idx].clone())
+    // }
+
     /// Selects two random servers and chooses the one with fewer connections.
     /// This provides better load distribution than pure random with minimal overhead.
     pub fn select(&self, servers: &[Server]) -> Result<Server> {

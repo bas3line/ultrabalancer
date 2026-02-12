@@ -30,7 +30,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 #[command(name = "ultrabalancer")]
 #[command(author = "Kira <kiraa@tuta.io>")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-#[command(about = "Production-ready high-performance load balancer", long_about = None)]
+#[command(about = "High-performance load balancer", long_about = None)]
 #[command(styles = get_styles())]
 struct Cli {
     #[command(subcommand)]

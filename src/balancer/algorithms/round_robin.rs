@@ -25,7 +25,7 @@ impl RoundRobinSelector {
         // Wrapping on overflow is intentional - modulo handles it correctly.
         let index = self.current_index.fetch_add(1, Ordering::Relaxed);
         let server = &servers[index % servers.len()];
-        
+
         Ok(server.clone())
     }
 }

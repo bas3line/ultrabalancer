@@ -9,7 +9,7 @@ impl LeastConnectionsSelector {
     }
 
     /// Selects the server with the fewest active connections.
-    /// 
+    ///
     /// Note: There's an inherent race condition between reading connection counts
     /// and the caller incrementing connections. This is acceptable for load balancing
     /// as perfect accuracy isn't required - the algorithm provides good distribution
@@ -26,8 +26,7 @@ impl LeastConnectionsSelector {
             .min_by(|a, b| {
                 let conn_a = a.connection_count();
                 let conn_b = b.connection_count();
-                conn_a.cmp(&conn_b)
-                    .then_with(|| b.weight.cmp(&a.weight)) // Higher weight wins ties
+                conn_a.cmp(&conn_b).then_with(|| b.weight.cmp(&a.weight)) // Higher weight wins ties
             })
             .cloned()
             .ok_or(crate::error::LoadBalancerError::NoHealthyBackends)

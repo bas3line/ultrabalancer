@@ -19,7 +19,7 @@ impl IpHashSelector {
         // Use xxHash for faster hashing than DefaultHasher
         let hash = xxh3_64(client_ip.as_bytes());
         let index = (hash as usize) % servers.len();
-        
+
         Ok(servers[index].clone())
     }
 }

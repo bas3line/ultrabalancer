@@ -40,10 +40,10 @@ impl WeightedRoundRobinSelector {
         let gcd = self.gcd_weights(servers);
 
         let mut state = self.state.lock();
-        
+
         // Limit iterations to prevent infinite loop (max: servers.len() * max_weight / gcd)
         let max_iterations = servers.len() * (max_weight as usize) / (gcd as usize).max(1);
-        
+
         for _ in 0..max_iterations {
             state.current_index = (state.current_index + 1) % servers.len();
 
@@ -60,7 +60,8 @@ impl WeightedRoundRobinSelector {
         }
 
         // Fallback: return first server with non-zero weight, or first server
-        Ok(servers.iter()
+        Ok(servers
+            .iter()
             .find(|s| s.weight > 0)
             .cloned()
             .unwrap_or_else(|| servers[0].clone()))
@@ -76,8 +77,9 @@ impl WeightedRoundRobinSelector {
             }
             a.abs()
         }
-        
-        servers.iter()
+
+        servers
+            .iter()
             .map(|s| s.weight as i32)
             .filter(|&w| w > 0)
             .fold(0, |acc, w| gcd(acc, w))
