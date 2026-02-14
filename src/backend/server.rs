@@ -29,7 +29,7 @@ pub struct Server {
     pub id: String,
     pub host: String,
     pub port: u16,
-    pub weight: u32,
+    weight: Arc<RwLock<u32>>,
     status: Arc<RwLock<ServerStatus>>,
     fail_count: Arc<AtomicU32>,
     success_count: Arc<AtomicU64>,
@@ -46,7 +46,7 @@ impl Server {
             id: id.clone(),
             host,
             port,
-            weight,
+            weight: Arc::new(RwLock::new(weight)),
             status: Arc::new(RwLock::new(ServerStatus::Up)),
             fail_count: Arc::new(AtomicU32::new(0)),
             success_count: Arc::new(AtomicU64::new(0)),
@@ -81,6 +81,11 @@ impl Server {
         *self.last_check.write() = Some(Instant::now());
     }
 
+    pub fn set_weight(&self, weight: u32) {
+        let mut w = self.weight.write();
+        *w = weight;
+    }
+
     pub fn mark_healthy(&self) {
         self.set_status(ServerStatus::Up);
         self.fail_count.store(0, Ordering::Relaxed);
@@ -110,11 +115,11 @@ impl Server {
 
     pub fn decrement_connections(&self) {
         // Use fetch_update to prevent underflow
-        let _ = self.active_connections.fetch_update(
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-            |current| current.checked_sub(1),
-        );
+        let _ =
+            self.active_connections
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                    current.checked_sub(1)
+                });
     }
 
     pub fn connection_count(&self) -> u32 {
@@ -140,6 +145,10 @@ impl Server {
     pub fn last_check_time(&self) -> Option<Instant> {
         *self.last_check.read()
     }
+
+    pub fn weight(&self) -> u32 {
+        *self.weight.read()
+    }
 }
 
 impl fmt::Debug for Server {
@@ -147,7 +156,7 @@ impl fmt::Debug for Server {
         f.debug_struct("Server")
             .field("id", &self.id)
             .field("address", &self.address())
-            .field("weight", &self.weight)
+            .field("weight", &self.weight())
             .field("status", &self.status())
             .field("active_connections", &self.connection_count())
             .finish()

@@ -27,7 +27,7 @@ impl WeightedRoundRobinSelector {
             return Err(crate::error::LoadBalancerError::NoHealthyBackends);
         }
 
-        let total_weight: i32 = servers.iter().map(|s| s.weight as i32).sum();
+        let total_weight: i32 = servers.iter().map(|s| s.weight() as i32).sum();
         if total_weight == 0 {
             // All weights are 0, fall back to simple round-robin
             let mut state = self.state.lock();
@@ -36,7 +36,7 @@ impl WeightedRoundRobinSelector {
             return Ok(servers[idx].clone());
         }
 
-        let max_weight = servers.iter().map(|s| s.weight).max().unwrap_or(1) as i32;
+        let max_weight = servers.iter().map(|s| s.weight()).max().unwrap_or(1) as i32;
         let gcd = self.gcd_weights(servers);
 
         let mut state = self.state.lock();
@@ -54,7 +54,7 @@ impl WeightedRoundRobinSelector {
                 }
             }
 
-            if servers[state.current_index].weight as i32 >= state.current_weight {
+            if servers[state.current_index].weight() as i32 >= state.current_weight {
                 return Ok(servers[state.current_index].clone());
             }
         }
@@ -62,7 +62,7 @@ impl WeightedRoundRobinSelector {
         // Fallback: return first server with non-zero weight, or first server
         Ok(servers
             .iter()
-            .find(|s| s.weight > 0)
+            .find(|s| s.weight() > 0)
             .cloned()
             .unwrap_or_else(|| servers[0].clone()))
     }
@@ -80,7 +80,7 @@ impl WeightedRoundRobinSelector {
 
         servers
             .iter()
-            .map(|s| s.weight as i32)
+            .map(|s| s.weight() as i32)
             .filter(|&w| w > 0)
             .fold(0, gcd)
             .max(1)

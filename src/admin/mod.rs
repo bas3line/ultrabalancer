@@ -3,6 +3,10 @@ use http_body_util::Full;
 use hyper::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+use fastrand;
+
+pub mod dashboard;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendInfo {
@@ -11,6 +15,7 @@ pub struct BackendInfo {
     pub healthy: bool,
     pub active_connections: usize,
     pub total_requests: u64,
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,22 +83,81 @@ pub trait BackendManager: Send + Sync {
 pub struct AdminApi<M: BackendManager> {
     manager: Arc<M>,
     api_key: Option<String>,
+    key_created: Option<SystemTime>,
+    key_ttl_hours: Option<u64>,
 }
 
 impl<M: BackendManager> AdminApi<M> {
-    pub fn new(manager: Arc<M>, api_key: Option<String>) -> Self {
-        Self { manager, api_key }
+    pub fn new(manager: Arc<M>, api_key: Option<String>, key_ttl_hours: Option<u64>) -> Self {
+        Self {
+            manager,
+            api_key,
+            key_created: None,
+            key_ttl_hours,
+        }
+    }
+
+    pub fn generate_api_key() -> String {
+        let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chars().collect();
+        let mut key = String::from("ub_");
+        let mut rng = fastrand::Rng::new();
+        for _ in 0..32 {
+            key.push(chars[rng.usize(..chars.len())]);
+        }
+        key
+    }
+
+    pub fn is_key_valid(&self, input: &str) -> bool {
+        if let Some(ref key) = self.api_key {
+            key == input
+        } else {
+            false
+        }
+    }
+
+    pub fn is_key_expired(&self) -> bool {
+        if let (Some(created), Some(ttl)) = (self.key_created, self.key_ttl_hours) {
+            if let Ok(elapsed) = SystemTime::now().duration_since(created) {
+                elapsed > Duration::from_secs(ttl * 3600)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 
     pub async fn handle(&self, req: Request<hyper::body::Incoming>) -> Response<Full<Bytes>> {
-        if let Some(ref key) = self.api_key {
+        if let Some(_) = &self.api_key {
+            if self.is_key_expired() {
+                return self.json_response(
+                    StatusCode::UNAUTHORIZED,
+                    &AdminResponse::error("API key has expired"),
+                );
+            }
+
             let auth = req
                 .headers()
                 .get("X-API-Key")
-                .and_then(|v| v.to_str().ok());
+                .and_then(|v| v.to_str().ok())
+                .or_else(|| {
+                    req.uri()
+                        .query()
+                        .and_then(|q| {
+                            if let Some(pos) = q.find("api_key=") {
+                                let val = &q[pos + 8..];
+                                Some(val.split('&').next()?.trim())
+                            } else {
+                                None
+                            }
+                        })
+                });
 
-            if auth != Some(key) {
-                return self.json_response(StatusCode::UNAUTHORIZED, &AdminResponse::error("Invalid API key"));
+            if !auth.map(|a| self.is_key_valid(a)).unwrap_or(false) {
+                return self.json_response(
+                    StatusCode::UNAUTHORIZED,
+                    &AdminResponse::error("Invalid or missing API key"),
+                );
             }
         }
 
@@ -109,6 +173,7 @@ impl<M: BackendManager> AdminApi<M> {
             ("POST", "/admin/backends/undrain") => self.undrain_backend(req).await,
             ("GET", "/admin/health") => self.health_check(),
             ("POST", "/admin/reload") => self.reload_config(),
+            ("GET", "/admin/metrics") => self.get_metrics(),
             _ => self.json_response(StatusCode::NOT_FOUND, &AdminResponse::error("Endpoint not found")),
         }
     }
@@ -221,6 +286,15 @@ impl<M: BackendManager> AdminApi<M> {
         self.json_response(StatusCode::OK, &AdminResponse::success("Config reload triggered"))
     }
 
+    fn get_metrics(&self) -> Response<Full<Bytes>> {
+        let backends = self.manager.list_backends();
+        let metrics = serde_json::to_value(&backends).unwrap_or_default();
+        self.json_response(
+            StatusCode::OK,
+            &AdminResponse::success_with_data("Admin metrics", metrics),
+        )
+    }
+
     async fn read_body(&self, req: Request<hyper::body::Incoming>) -> Result<Bytes, String> {
         use http_body_util::BodyExt;
         req.into_body()
@@ -245,6 +319,8 @@ impl<M: BackendManager> Clone for AdminApi<M> {
         Self {
             manager: Arc::clone(&self.manager),
             api_key: self.api_key.clone(),
+            key_created: self.key_created,
+            key_ttl_hours: self.key_ttl_hours,
         }
     }
 }

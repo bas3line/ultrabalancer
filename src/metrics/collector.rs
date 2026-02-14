@@ -1,7 +1,7 @@
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -28,6 +28,8 @@ pub struct BackendMetrics {
     pub failed_requests: u64,
     pub avg_response_time_ms: f64,
     pub active_connections: u64,
+    pub last_response_time_ms: f64,
+    pub status: String,
 }
 
 struct BackendMetricsData {
@@ -35,6 +37,7 @@ struct BackendMetricsData {
     successful_requests: Arc<AtomicU64>,
     failed_requests: Arc<AtomicU64>,
     response_times: Arc<RwLock<Vec<Duration>>>,
+    active_connections: Arc<AtomicU32>,
 }
 
 impl BackendMetricsData {
@@ -44,7 +47,20 @@ impl BackendMetricsData {
             successful_requests: Arc::new(AtomicU64::new(0)),
             failed_requests: Arc::new(AtomicU64::new(0)),
             response_times: Arc::new(RwLock::new(Vec::with_capacity(1000))),
+            active_connections: Arc::new(AtomicU32::new(0)),
         }
+    }
+
+    fn increment_connections(&self) {
+        self.active_connections.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn decrement_connections(&self) {
+        let _ =
+            self.active_connections
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                    Some(current.saturating_sub(1))
+                });
     }
 }
 
@@ -55,8 +71,13 @@ impl Clone for BackendMetricsData {
             successful_requests: Arc::clone(&self.successful_requests),
             failed_requests: Arc::clone(&self.failed_requests),
             response_times: Arc::clone(&self.response_times),
+            active_connections: Arc::clone(&self.active_connections),
         }
     }
+}
+
+fn active_connections_to_u64(connections: u32) -> u64 {
+    connections as u64
 }
 
 pub struct MetricsCollector {
@@ -114,7 +135,9 @@ impl MetricsCollector {
         if let Some(backend_data) = backends.get(backend) {
             backend_data.total_requests.fetch_add(1, Ordering::Relaxed);
             if success {
-                backend_data.successful_requests.fetch_add(1, Ordering::Relaxed);
+                backend_data
+                    .successful_requests
+                    .fetch_add(1, Ordering::Relaxed);
             } else {
                 backend_data.failed_requests.fetch_add(1, Ordering::Relaxed);
             }
@@ -128,6 +151,24 @@ impl MetricsCollector {
             drop(backends);
             self.get_or_create_backend_metrics(backend);
             self.record_backend_request(backend, success, duration);
+        }
+    }
+
+    pub fn increment_backend_connections(&self, backend: &str) {
+        let backends = self.backend_metrics.read();
+        if let Some(backend_data) = backends.get(backend) {
+            backend_data.increment_connections();
+        } else {
+            drop(backends);
+            self.get_or_create_backend_metrics(backend);
+            self.increment_backend_connections(backend);
+        }
+    }
+
+    pub fn decrement_backend_connections(&self, backend: &str) {
+        let backends = self.backend_metrics.read();
+        if let Some(backend_data) = backends.get(backend) {
+            backend_data.decrement_connections();
         }
     }
 
@@ -180,6 +221,11 @@ impl MetricsCollector {
                         let sum: Duration = times.iter().sum();
                         sum.as_secs_f64() / times.len() as f64 * 1000.0
                     };
+                    let last_rt = times
+                        .last()
+                        .map(|d| d.as_secs_f64() * 1000.0)
+                        .unwrap_or(0.0);
+                    let active_conn = data.active_connections.load(Ordering::Relaxed);
 
                     (
                         name.clone(),
@@ -188,7 +234,9 @@ impl MetricsCollector {
                             successful_requests: data.successful_requests.load(Ordering::Relaxed),
                             failed_requests: data.failed_requests.load(Ordering::Relaxed),
                             avg_response_time_ms: avg,
-                            active_connections: 0,
+                            active_connections: active_conn as u64,
+                            last_response_time_ms: last_rt,
+                            status: "up".to_string(),
                         },
                     )
                 })

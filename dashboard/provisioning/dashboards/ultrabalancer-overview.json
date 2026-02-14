@@ -1,0 +1,253 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "content": "# UltraBalancer Dashboard\n\nReal-time load balancer metrics and monitoring",
+        "mode": "markdown"
+      },
+      "title": "",
+      "type": "text"
+    },
+    {
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 2},
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [{"expr": "ultrabalancer_requests_total", "refId": "A"}],
+      "title": "Total Requests",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 2},
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [{"expr": "ultrabalancer_requests_per_second", "refId": "A"}],
+      "title": "Requests/sec",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 2},
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [{"expr": "ultrabalancer_error_ratio * 100", "refId": "A"}],
+      "title": "Error Rate %",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 2},
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [{"expr": "ultrabalancer_healthy_backends", "refId": "A"}],
+      "title": "Healthy Backends",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"}
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "id": 6,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "targets": [{"expr": "rate(ultrabalancer_requests_total[1m])", "legendFormat": "Requests/sec", "refId": "A"}],
+      "title": "Request Rate",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "id": 7,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "targets": [
+        {"expr": "ultrabalancer_response_time_ms_seconds{quantile=\"0.5\"}", "legendFormat": "p50", "refId": "A"},
+        {"expr": "ultrabalancer_response_time_ms_seconds{quantile=\"0.95\"}", "legendFormat": "p95", "refId": "B"},
+        {"expr": "ultrabalancer_response_time_ms_seconds{quantile=\"0.99\"}", "legendFormat": "p99", "refId": "C"}
+      ],
+      "title": "Response Time",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "id": 8,
+      "options": {
+        "legend": {"calcs": [], "displayMode": "table", "placement": "right", "showLegend": true},
+        "pieType": "pie",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "targets": [{"expr": "ultrabalancer_backend_requests_total", "legendFormat": "{{backend}}", "refId": "A"}],
+      "title": "Request Distribution by Backend",
+      "type": "piechart"
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "id": 9,
+      "options": {
+        "legend": {"calcs": [], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "targets": [{"expr": "ultrabalancer_backend_active_connections", "legendFormat": "{{backend}}", "refId": "A"}],
+      "title": "Active Connections per Backend",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"}
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 22},
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "table",
+        "justifyMode": "auto",
+        "orientation": "table",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [{"expr": "ultrabalancer_backend_status", "format": "table", "instant": true, "refId": "A"}],
+      "title": "Backend Health Status",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"0": {"color": "red", "text": "DOWN"}}, "type": "value"},
+            {"options": {"1": {"color": "green", "text": "UP"}}, "type": "value"}
+          ]
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 22},
+      "id": 11,
+      "options": {
+        "legend": {"calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "targets": [{"expr": "ultrabalancer_backend_error_ratio * 100", "legendFormat": "{{backend}}", "refId": "A"}],
+      "title": "Error Rate by Backend (%)",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 30},
+      "id": 12,
+      "options": {
+        "legend": {"calcs": [], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "targets": [{"expr": "rate(ultrabalancer_backend_requests_failed_total[1m])", "legendFormat": "{{backend}}", "refId": "A"}],
+      "title": "Failed Requests Rate by Backend",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "reqps"
+        }
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["ultrabalancer", "load-balancer"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "timepicker": {"refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]},
+  "timezone": "browser",
+  "title": "UltraBalancer Overview",
+  "uid": "ultrabalancer-overview",
+  "version": 1,
+  "weekStart": ""
+}

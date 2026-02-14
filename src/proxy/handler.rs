@@ -291,11 +291,24 @@ impl RequestHandler {
 
         let servers = self.pool.get_healthy_servers();
         if servers.is_empty() {
-            warn!("No healthy backends available");
+            let all_servers = self.pool.get_all_servers();
+            let unhealthy_backends: Vec<String> = all_servers.iter().map(|s| s.address()).collect();
+            let healthy_count = all_servers.iter().filter(|s| s.is_healthy()).count();
+            let total_count = all_servers.len();
+
+            warn!("No healthy backends available. Checked {} backends, {} healthy", total_count, healthy_count);
             self.metrics.increment_failed_requests();
-            return Ok(Self::error_response(
+
+            let error_msg = format!(
+                "No healthy backends. {} of {} backends are unhealthy. Health checks are running.",
+                total_count.saturating_sub(healthy_count),
+                total_count
+            );
+            return Ok(Self::detailed_error_response(
                 StatusCode::SERVICE_UNAVAILABLE,
-                "No healthy backends",
+                &error_msg,
+                &unhealthy_backends,
+                &health_check_interval_hint(),
             ));
         }
 
@@ -330,6 +343,7 @@ impl RequestHandler {
         let mut server_to_decrement: Option<Server>;
 
         let response = loop {
+            let backend_request_start = Instant::now();
             current_server.increment_connections();
             server_to_decrement = Some(current_server.clone());
             let backend_addr = current_server.address();
@@ -380,9 +394,10 @@ impl RequestHandler {
                     }
 
                     self.metrics.increment_successful_requests();
+                    let backend_request_duration = backend_request_start.elapsed();
+                    self.metrics.record_backend_request(&backend_addr, true, backend_request_duration);
                     let resp_headers = resp.headers().clone();
                     let body_bytes = resp.bytes().await.unwrap_or_default();
-                    let backend_addr = current_server.address();
 
                     // Track if upstream already compressed the response
                     let upstream_encoding = resp_headers.get(CONTENT_ENCODING)
@@ -463,6 +478,7 @@ impl RequestHandler {
                 }
                 Err(e) => {
                     let failed_backend = current_server.address();
+                    let backend_request_duration = backend_request_start.elapsed();
                     // Decrement and clear the tracked server
                     if let Some(s) = server_to_decrement.take() {
                         s.decrement_connections();
@@ -484,7 +500,8 @@ impl RequestHandler {
 
                     error!("Backend request failed for {}: {}", failed_backend, e);
                     self.metrics.increment_failed_requests();
-                    break Ok(Self::error_response(StatusCode::BAD_GATEWAY, "Backend request failed"));
+                    self.metrics.record_backend_request(&failed_backend, false, backend_request_duration);
+                    break Ok(Self::error_response(StatusCode::BAD_GATEWAY, &format!("Backend request failed: {}", failed_backend)));
                 }
             }
         };
@@ -605,6 +622,25 @@ impl RequestHandler {
             .body(Full::new(Bytes::from(body.to_string())))
             .unwrap()
     }
+
+    fn detailed_error_response(status: StatusCode, message: &str, backends: &[String], next_check: &str) -> Response<Full<Bytes>> {
+        let body = serde_json::json!({
+            "error": message,
+            "unhealthy_backends": backends,
+            "retry_after_seconds": next_check,
+            "status_code": status.as_u16()
+        });
+        Response::builder()
+            .status(status)
+            .header("Content-Type", "application/json")
+            .header("Retry-After", next_check)
+            .body(Full::new(Bytes::from(body.to_string())))
+            .unwrap()
+    }
+}
+
+fn health_check_interval_hint() -> String {
+    "5".to_string()
 }
 
 impl Clone for RequestHandler {
