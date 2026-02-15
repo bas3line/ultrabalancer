@@ -5,7 +5,9 @@ use crate::backend::ServerPool;
 use crate::balancer::LoadBalancerSelector;
 use crate::cache::ResponseCache;
 use crate::metrics::MetricsCollector;
-use crate::middleware::{AccessLogger, CompressionMiddleware, IpFilter, LogFormat, RetryConfig, RetryMiddleware};
+use crate::middleware::{
+    AccessLogger, CompressionMiddleware, IpFilter, LogFormat, RetryConfig, RetryMiddleware,
+};
 use crate::utils::{GracefulShutdown, RateLimiter, StickySessionManager};
 use handler::RequestHandler;
 use hyper::server::conn::{http1, http2};
@@ -148,7 +150,8 @@ impl ProxyServer {
         }
 
         if config.sticky_sessions_enabled {
-            let sticky = StickySessionManager::new(&config.sticky_cookie_name, config.sticky_ttl_secs);
+            let sticky =
+                StickySessionManager::new(&config.sticky_cookie_name, config.sticky_ttl_secs);
             handler = handler.with_sticky_sessions(sticky);
         }
 

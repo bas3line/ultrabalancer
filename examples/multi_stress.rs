@@ -1,15 +1,10 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 static TOTAL_SUCCESS: AtomicU64 = AtomicU64::new(0);
 static TOTAL_FAILED: AtomicU64 = AtomicU64::new(0);
 
-async fn worker(
-    client: reqwest::Client,
-    url: String,
-    requests_per_worker: u64,
-) {
+async fn worker(client: reqwest::Client, url: String, requests_per_worker: u64) {
     for _ in 0..requests_per_worker {
         match client.get(&url).send().await {
             Ok(resp) if resp.status().is_success() => {

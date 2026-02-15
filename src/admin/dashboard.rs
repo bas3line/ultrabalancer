@@ -30,7 +30,9 @@ impl Default for DashboardConfig {
 }
 
 fn generate_password() -> String {
-    let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*".chars().collect();
+    let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+        .chars()
+        .collect();
     let mut password = String::new();
     let mut rng = fastrand::Rng::new();
     for _ in 0..16 {
@@ -44,70 +46,64 @@ pub struct DashboardManager;
 impl DashboardManager {
     pub async fn interactive_setup() -> Result<DashboardConfig, anyhow::Error> {
         println!();
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!("                       ULTRA BALANCER DASHBOARD SETUP                          ");
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!();
         println!("  Deploy a complete monitoring stack with Grafana & Prometheus");
         println!();
-        
+
         let mut config = DashboardConfig::default();
-        
-        println!("--------------------------------------------------------------------------------");
+
+        println!(
+            "--------------------------------------------------------------------------------"
+        );
         println!("  ULTRABALANCER CONNECTION");
         println!("  Configure how Prometheus connects to UltraBalancer");
-        println!("--------------------------------------------------------------------------------");
+        println!(
+            "--------------------------------------------------------------------------------"
+        );
         config.ultrabalancer_host = prompt_input(
             "Enter UltraBalancer host",
             "localhost",
             &["localhost", "127.0.0.1", "0.0.0.0", "Custom IP or hostname"],
         );
-        
-        config.ultrabalancer_port = prompt_number(
-            "Enter UltraBalancer port",
-            8080,
-            1,
-            65535,
-        );
-        
+
+        config.ultrabalancer_port = prompt_number("Enter UltraBalancer port", 8080, 1, 65535);
+
         println!();
-        println!("--------------------------------------------------------------------------------");
+        println!(
+            "--------------------------------------------------------------------------------"
+        );
         println!("  SERVICE PORTS");
         println!("  Configure exposed ports for monitoring services");
-        println!("--------------------------------------------------------------------------------");
-        
-        config.prometheus_port = prompt_number(
-            "Prometheus port",
-            9090,
-            1,
-            65535,
+        println!(
+            "--------------------------------------------------------------------------------"
         );
-        
-        config.grafana_port = prompt_number(
-            "Grafana port",
-            3000,
-            1,
-            65535,
-        );
-        
+
+        config.prometheus_port = prompt_number("Prometheus port", 9090, 1, 65535);
+
+        config.grafana_port = prompt_number("Grafana port", 3000, 1, 65535);
+
         println!();
-        println!("--------------------------------------------------------------------------------");
+        println!(
+            "--------------------------------------------------------------------------------"
+        );
         println!("  SECURITY SETTINGS");
         println!("  Configure Grafana admin credentials");
-        println!("--------------------------------------------------------------------------------");
-        
-        let use_custom = prompt_yes_no(
-            "Use custom Grafana credentials?",
-            false,
+        println!(
+            "--------------------------------------------------------------------------------"
         );
-        
+
+        let use_custom = prompt_yes_no("Use custom Grafana credentials?", false);
+
         if use_custom {
-            config.grafana_user = prompt_input(
-                "Grafana username",
-                "admin",
-                &["Admin username"],
-            );
-            
+            config.grafana_user = prompt_input("Grafana username", "admin", &["Admin username"]);
+
             let mut new_pass;
             loop {
                 new_pass = prompt_password("Grafana password", "Minimum 8 characters");
@@ -119,17 +115,18 @@ impl DashboardManager {
             }
             config.grafana_password = new_pass;
         }
-        
+
         println!();
-        println!("--------------------------------------------------------------------------------");
-        println!("  DOCKER CONFIGURATION");
-        println!("--------------------------------------------------------------------------------");
-        
-        let use_custom_network = prompt_yes_no(
-            "Use custom Docker network name?",
-            false,
+        println!(
+            "--------------------------------------------------------------------------------"
         );
-        
+        println!("  DOCKER CONFIGURATION");
+        println!(
+            "--------------------------------------------------------------------------------"
+        );
+
+        let use_custom_network = prompt_yes_no("Use custom Docker network name?", false);
+
         if use_custom_network {
             config.docker_network = prompt_input(
                 "Network name",
@@ -137,12 +134,9 @@ impl DashboardManager {
                 &["Docker network name"],
             );
         }
-        
-        let use_custom_project = prompt_yes_no(
-            "Use custom project name?",
-            false,
-        );
-        
+
+        let use_custom_project = prompt_yes_no("Use custom project name?", false);
+
         if use_custom_project {
             config.project_name = prompt_input(
                 "Project name",
@@ -150,86 +144,99 @@ impl DashboardManager {
                 &["Docker Compose project name"],
             );
         }
-        
+
         println!();
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!("  DASHBOARD CONFIGURATION SUMMARY");
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!();
-        println!("  UltraBalancer:  {}:{}", config.ultrabalancer_host, config.ultrabalancer_port);
+        println!(
+            "  UltraBalancer:  {}:{}",
+            config.ultrabalancer_host, config.ultrabalancer_port
+        );
         println!("  Prometheus:     localhost:{}", config.prometheus_port);
         println!("  Grafana:        localhost:{}", config.grafana_port);
         println!("  Grafana User:   {}", config.grafana_user);
-        println!("  Grafana Pass:   {}", mask_password(&config.grafana_password));
-        println!();
-        
-        let proceed = prompt_yes_no(
-            "Start dashboard with these settings?",
-            true,
+        println!(
+            "  Grafana Pass:   {}",
+            mask_password(&config.grafana_password)
         );
-        
+        println!();
+
+        let proceed = prompt_yes_no("Start dashboard with these settings?", true);
+
         if !proceed {
             println!();
             println!("  Dashboard setup cancelled. Run 'ultrabalancer dashboard' to try again.");
             std::process::exit(0);
         }
-        
+
         Ok(config)
     }
-    
-    pub async fn generate_dashboard(config: &DashboardConfig, output_dir: &Path) -> Result<(), anyhow::Error> {
+
+    pub async fn generate_dashboard(
+        config: &DashboardConfig,
+        output_dir: &Path,
+    ) -> Result<(), anyhow::Error> {
         println!();
         println!("  Generating dashboard files...");
-        
+
         fs::create_dir_all(output_dir.join("provisioning/dashboards"))?;
         fs::create_dir_all(output_dir.join("provisioning/datasources"))?;
-        
+
         let docker_compose = generate_docker_compose(config);
         let docker_path = output_dir.join("docker-compose.yml");
         fs::write(&docker_path, docker_compose)?;
         println!("  [OK] {}", docker_path.display());
-        
+
         let prometheus_config = generate_prometheus_config(config);
         let prometheus_path = output_dir.join("prometheus.yml");
         fs::write(&prometheus_path, prometheus_config)?;
         println!("  [OK] {}", prometheus_path.display());
-        
+
         let dashboard_json = std::fs::read_to_string(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/grafana-dashboard.json")
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/grafana-dashboard.json"),
         )?;
         let dashboard_path = output_dir.join("provisioning/dashboards/ultrabalancer-overview.json");
         fs::write(&dashboard_path, dashboard_json)?;
         println!("  [OK] {}", dashboard_path.display());
-        
+
         let datasource_config = generate_grafana_datasource();
         let datasource_path = output_dir.join("provisioning/datasources/prometheus.yml");
         fs::write(&datasource_path, datasource_config)?;
         println!("  [OK] {}", datasource_path.display());
-        
+
         let startup_script = generate_startup_script(config);
         let script_path = output_dir.join("start-dashboard.sh");
         fs::write(&script_path, startup_script)?;
         println!("  [OK] {}", script_path.display());
-        
+
         let env_content = generate_env_file(config);
         let env_path = output_dir.join(".env");
         fs::write(&env_path, env_content)?;
         println!("  [OK] {}", env_path.display());
-        
+
         Ok(())
     }
-    
-    pub async fn start_dashboard(config: &DashboardConfig, output_dir: &Path) -> Result<(), anyhow::Error> {
+
+    pub async fn start_dashboard(
+        config: &DashboardConfig,
+        output_dir: &Path,
+    ) -> Result<(), anyhow::Error> {
         println!();
         println!("  Starting Docker services...");
-        
+
         std::env::set_current_dir(output_dir)?;
-        
+
         println!("  Checking Docker availability...");
         let docker_check = std::process::Command::new("docker")
             .args(&["--version"])
             .output();
-        
+
         if docker_check.is_err() {
             println!();
             println!("  ERROR: Docker is not installed or not running!");
@@ -241,36 +248,49 @@ impl DashboardManager {
             println!();
             return Ok(());
         }
-        
+
         println!("  Creating Docker network...");
         std::process::Command::new("docker")
-            .args(&["network", "create", "--driver", "bridge", &config.docker_network])
+            .args(&[
+                "network",
+                "create",
+                "--driver",
+                "bridge",
+                &config.docker_network,
+            ])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .output()?;
-        
-        println!("  Starting Prometheus on port {}...", config.prometheus_port);
+
+        println!(
+            "  Starting Prometheus on port {}...",
+            config.prometheus_port
+        );
         println!("  Starting Grafana on port {}...", config.grafana_port);
-        
+
         let output = std::process::Command::new("docker")
             .args(&["compose", "-p", &config.project_name, "up", "-d", "--build"])
             .output()?;
-        
+
         if !output.status.success() {
             println!("  ERROR: Failed to start Docker services");
             println!("{}", String::from_utf8_lossy(&output.stderr));
             return Ok(());
         }
-        
+
         println!();
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!("  DASHBOARD IS READY!");
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!();
-        
+
         let grafana_url = format!("http://localhost:{}", config.grafana_port);
         let prometheus_url = format!("http://localhost:{}", config.prometheus_port);
-        
+
         println!("  +----------------------------------------------------------------------+");
         println!("  |                       YOUR MONITORING STACK                        |");
         println!("  +----------------------------------------------------------------------+");
@@ -279,26 +299,41 @@ impl DashboardManager {
         println!("  +----------------------------------------------------------------------+");
         println!("  |  Grafana Credentials:                                              |");
         println!("  |      User:     {:<55} |", config.grafana_user);
-        println!("  |      Password: {:<55} |", mask_password(&config.grafana_password));
+        println!(
+            "  |      Password: {:<55} |",
+            mask_password(&config.grafana_password)
+        );
         println!("  +----------------------------------------------------------------------+");
         println!();
-        
+
         let open_browser = prompt_yes_no("Open Grafana in browser?", true);
-        
+
         if open_browser {
             println!();
             println!("  Opening Grafana...");
-            
+
             #[cfg(target_os = "macos")]
-            std::process::Command::new("open").arg(&grafana_url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output()?;
-            
+            std::process::Command::new("open")
+                .arg(&grafana_url)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output()?;
+
             #[cfg(target_os = "linux")]
-            std::process::Command::new("xdg-open").arg(&grafana_url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output()?;
-            
+            std::process::Command::new("xdg-open")
+                .arg(&grafana_url)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output()?;
+
             #[cfg(target_os = "windows")]
-            std::process::Command::new("cmd").args(&["/c", "start", &grafana_url]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output()?;
+            std::process::Command::new("cmd")
+                .args(&["/c", "start", &grafana_url])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output()?;
         }
-        
+
         println!();
         println!("  NEXT STEPS:");
         println!("  1. Log into Grafana with credentials above");
@@ -307,49 +342,52 @@ impl DashboardManager {
         println!();
         println!("  To stop dashboard: cd dashboard && ./start-dashboard.sh stop");
         println!();
-        
+
         Ok(())
     }
-    
+
     pub async fn stop_dashboard(config: &DashboardConfig) -> Result<(), anyhow::Error> {
         println!();
         println!("  Stopping dashboard...");
-        
+
         let output = std::process::Command::new("docker")
             .args(&["compose", "-p", &config.project_name, "down", "-v"])
             .output()?;
-        
+
         if output.status.success() {
             std::process::Command::new("docker")
                 .args(&["network", "rm", &config.docker_network])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .output()?;
-            
+
             println!("  [OK] Dashboard stopped and cleaned up");
         } else {
             println!("  [ERROR] Failed to stop dashboard");
         }
-        
+
         Ok(())
     }
-    
-    pub async fn restart_dashboard(config: &DashboardConfig, output_dir: &Path) -> Result<(), anyhow::Error> {
+
+    pub async fn restart_dashboard(
+        config: &DashboardConfig,
+        output_dir: &Path,
+    ) -> Result<(), anyhow::Error> {
         println!();
         println!("  Restarting dashboard...");
         Self::stop_dashboard(config).await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         Self::start_dashboard(config, output_dir).await
     }
-    
+
     pub async fn reset_dashboard(config: &DashboardConfig) -> Result<(), anyhow::Error> {
         println!();
         println!("  Resetting dashboard (stop + remove all data)...");
-        
+
         Self::stop_dashboard(config).await?;
-        
+
         let data_paths = &["prometheus_data", "grafana_data"];
-        
+
         for path in data_paths {
             println!("  Removing volume {}...", path);
             std::process::Command::new("docker")
@@ -358,27 +396,34 @@ impl DashboardManager {
                 .stderr(std::process::Stdio::null())
                 .output()?;
         }
-        
+
         println!("  [OK] Dashboard reset complete");
         Ok(())
     }
-    
+
     pub async fn show_status(config: &DashboardConfig) -> Result<(), anyhow::Error> {
         println!();
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!("  DASHBOARD STATUS");
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!();
-        
+
         let output = std::process::Command::new("docker")
             .args(&[
                 "ps",
-                "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}",
-                "--filter", &format!("name={}-prometheus", config.project_name),
-                "--filter", &format!("name={}-grafana", config.project_name),
+                "--format",
+                "table {{.Names}}\t{{.Status}}\t{{.Ports}}",
+                "--filter",
+                &format!("name={}-prometheus", config.project_name),
+                "--filter",
+                &format!("name={}-grafana", config.project_name),
             ])
             .output()?;
-        
+
         if output.status.success() {
             let status = String::from_utf8_lossy(&output.stdout);
             if status.contains("Up") {
@@ -393,79 +438,76 @@ impl DashboardManager {
                 println!("  Run 'ultrabalancer dashboard start' to begin");
             }
         }
-        
+
         println!();
-        println!("  Grafana URL:     http://localhost:{}", config.grafana_port);
-        println!("  Prometheus URL:  http://localhost:{}", config.prometheus_port);
-        
+        println!(
+            "  Grafana URL:     http://localhost:{}",
+            config.grafana_port
+        );
+        println!(
+            "  Prometheus URL:  http://localhost:{}",
+            config.prometheus_port
+        );
+
         Ok(())
     }
-    
+
     pub async fn edit_config(config: &DashboardConfig) -> Result<DashboardConfig, anyhow::Error> {
         println!();
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!("  EDIT DASHBOARD CONFIGURATION");
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!();
-        
+
         let mut new_config = config.clone();
-        
-        println!("  Current: {}:{} (press Enter to keep)", config.ultrabalancer_host, config.ultrabalancer_port);
-        new_config.ultrabalancer_host = prompt_input(
-            "UltraBalancer host",
-            &config.ultrabalancer_host,
-            &[],
+
+        println!(
+            "  Current: {}:{} (press Enter to keep)",
+            config.ultrabalancer_host, config.ultrabalancer_port
         );
-        
-        new_config.ultrabalancer_port = prompt_number(
-            "UltraBalancer port",
-            config.ultrabalancer_port,
-            1,
-            65535,
-        );
-        
-        new_config.prometheus_port = prompt_number(
-            "Prometheus port",
-            config.prometheus_port,
-            1,
-            65535,
-        );
-        
-        new_config.grafana_port = prompt_number(
-            "Grafana port",
-            config.grafana_port,
-            1,
-            65535,
-        );
-        
+        new_config.ultrabalancer_host =
+            prompt_input("UltraBalancer host", &config.ultrabalancer_host, &[]);
+
+        new_config.ultrabalancer_port =
+            prompt_number("UltraBalancer port", config.ultrabalancer_port, 1, 65535);
+
+        new_config.prometheus_port =
+            prompt_number("Prometheus port", config.prometheus_port, 1, 65535);
+
+        new_config.grafana_port = prompt_number("Grafana port", config.grafana_port, 1, 65535);
+
         println!();
         println!("  Configuration updated!");
         println!();
-        
+
         let restart = prompt_yes_no("Restart dashboard with new settings?", true);
-        
+
         if restart {
             println!();
             println!("  Restarting with new configuration...");
         }
-        
+
         Ok(new_config)
     }
-    
+
     pub async fn show_logs(config: &DashboardConfig) -> Result<(), anyhow::Error> {
         println!();
         println!("  Showing logs (Ctrl+C to exit)...");
         println!();
-        
+
         let mut child = std::process::Command::new("docker")
             .args(&["compose", "-p", &config.project_name, "logs", "-f"])
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .spawn()?;
-        
+
         tokio::signal::ctrl_c().await?;
         let _ = child.kill();
-        
+
         Ok(())
     }
 }
@@ -473,13 +515,13 @@ impl DashboardManager {
 fn prompt_input(prompt: &str, default: &str, _hints: &[&str]) -> String {
     println!("  {}", prompt);
     print!("  [{}] -> ", default);
-    
+
     use std::io::{self, Write};
     io::stdout().flush().unwrap();
-    
+
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
-    
+
     let input = input.trim();
     if input.is_empty() {
         default.to_string()
@@ -492,18 +534,18 @@ fn prompt_number(prompt: &str, default: u16, min: u16, max: u16) -> u16 {
     loop {
         println!("  {}", prompt);
         print!("  [{}] -> ", default);
-        
+
         use std::io::{self, Write};
         io::stdout().flush().unwrap();
-        
+
         let mut input = String::new();
         io::stdin().read_line(&mut input).unwrap();
-        
+
         let input = input.trim();
         if input.is_empty() {
             return default;
         }
-        
+
         match input.parse::<u16>() {
             Ok(n) if n >= min && n <= max => return n,
             _ => {
@@ -517,35 +559,35 @@ fn prompt_password(prompt: &str, hint: &str) -> String {
     println!("  {}", prompt);
     println!("  ({})", hint);
     print!("  -> ");
-    
+
     use std::io::{self, Write};
     io::stdout().flush().unwrap();
-    
+
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
-    
+
     input.trim().to_string()
 }
 
 fn prompt_yes_no(prompt: &str, default_yes: bool) -> bool {
     let default_str = if default_yes { "Y/n" } else { "y/N" };
     let default_bool = default_yes;
-    
+
     loop {
         print!("  {} [{}] -> ", prompt, default_str);
-        
+
         use std::io::{self, Write};
         io::stdout().flush().unwrap();
-        
+
         let mut input = String::new();
         io::stdin().read_line(&mut input).unwrap();
-        
+
         let input = input.trim().to_lowercase();
-        
+
         if input.is_empty() {
             return default_bool;
         }
-        
+
         match input.chars().next().unwrap() {
             'y' => return true,
             'n' => return false,
@@ -563,12 +605,17 @@ fn mask_password(pwd: &str) -> String {
     } else if len <= 2 {
         "*".repeat(len)
     } else {
-        format!("{}{}***", pwd.chars().next().unwrap(), pwd.chars().last().unwrap())
+        format!(
+            "{}{}***",
+            pwd.chars().next().unwrap(),
+            pwd.chars().last().unwrap()
+        )
     }
 }
 
 fn generate_docker_compose(config: &DashboardConfig) -> String {
-    format!(r#"version: '3.8'
+    format!(
+        r#"version: '3.8'
 
 services:
   prometheus:
@@ -624,7 +671,8 @@ networks:
 }
 
 fn generate_prometheus_config(config: &DashboardConfig) -> String {
-    format!(r#"global:
+    format!(
+        r#"global:
   scrape_interval: 5s
   evaluation_interval: 5s
 
@@ -651,11 +699,13 @@ datasources:
     isDefault: true
     version: 1
     editable: false
-"#.to_string()
+"#
+    .to_string()
 }
 
 fn generate_startup_script(config: &DashboardConfig) -> String {
-    format!(r#"#!/bin/bash
+    format!(
+        r#"#!/bin/bash
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
@@ -701,7 +751,8 @@ esac
 }
 
 fn generate_env_file(config: &DashboardConfig) -> String {
-    format!(r#"ULTRABALANCER_HOST={ultrabalancer_host}
+    format!(
+        r#"ULTRABALANCER_HOST={ultrabalancer_host}
 ULTRABALANCER_PORT={ultrabalancer_port}
 PROMETHEUS_PORT={prometheus_port}
 GRAFANA_PORT={grafana_port}

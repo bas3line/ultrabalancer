@@ -108,9 +108,8 @@ impl StickySessionManager {
 
     pub fn cleanup_expired(&self) {
         let now = Instant::now();
-        self.sessions.retain(|_, entry| {
-            now.duration_since(entry.last_access) < self.ttl
-        });
+        self.sessions
+            .retain(|_, entry| now.duration_since(entry.last_access) < self.ttl);
     }
 
     pub fn active_sessions(&self) -> usize {

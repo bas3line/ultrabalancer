@@ -2,9 +2,14 @@ use crate::backend::{Server, ServerPool};
 use crate::balancer::LoadBalancerSelector;
 use crate::cache::{CachedResponse, ResponseCache};
 use crate::metrics::{MetricsCollector, MetricsExporter};
-use crate::middleware::{AccessLogEntry, AccessLogger, CompressionAlgo, CompressionMiddleware, IpFilter, RetryMiddleware, RetryState};
+use crate::middleware::{
+    AccessLogEntry, AccessLogger, CompressionAlgo, CompressionMiddleware, IpFilter,
+    RetryMiddleware, RetryState,
+};
 use crate::routing::Router;
-use crate::utils::{ConnectionPool, GracefulShutdown, RateLimiter, RequestId, StickySessionManager};
+use crate::utils::{
+    ConnectionPool, GracefulShutdown, RateLimiter, RequestId, StickySessionManager,
+};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Body, Incoming};
@@ -206,7 +211,12 @@ impl RequestHandler {
                     self.metrics.record_response_time(duration);
 
                     if let Some(entry) = log_entry {
-                        let entry = entry.complete(cached.status, cached.body.len() as u64, duration, Some("CACHE".to_string()));
+                        let entry = entry.complete(
+                            cached.status,
+                            cached.body.len() as u64,
+                            duration,
+                            Some("CACHE".to_string()),
+                        );
                         if let Some(ref logger) = self.access_logger {
                             logger.log(entry);
                         }
@@ -220,12 +230,17 @@ impl RequestHandler {
         let response = match timeout(
             self.request_timeout,
             self.proxy_request(req, &client_ip, &request_id, compression_algo),
-        ).await {
+        )
+        .await
+        {
             Ok(res) => res,
             Err(_) => {
                 warn!("Request timeout after {:?}", self.request_timeout);
                 self.metrics.increment_failed_requests();
-                Ok(Self::error_response(StatusCode::GATEWAY_TIMEOUT, "Request timeout"))
+                Ok(Self::error_response(
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "Request timeout",
+                ))
             }
         };
 
@@ -237,9 +252,15 @@ impl RequestHandler {
         }
 
         if let Some(entry) = log_entry {
-            let status = response.as_ref().map(|r| r.status().as_u16()).unwrap_or(500);
+            let status = response
+                .as_ref()
+                .map(|r| r.status().as_u16())
+                .unwrap_or(500);
             // Note: bytes_sent is body size only, excludes HTTP headers
-            let bytes = response.as_ref().map(|r| r.body().size_hint().exact().unwrap_or(0)).unwrap_or(0);
+            let bytes = response
+                .as_ref()
+                .map(|r| r.body().size_hint().exact().unwrap_or(0))
+                .unwrap_or(0);
             let entry = entry.complete(status, bytes, duration, None);
             if let Some(ref logger) = self.access_logger {
                 logger.log(entry);
@@ -265,10 +286,15 @@ impl RequestHandler {
         let (routed_path, _backend_group) = if let Some(ref router) = self.router {
             let headers_map: std::collections::HashMap<String, String> = headers
                 .iter()
-                .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.as_str().to_string(), v.to_string())))
+                .filter_map(|(k, v)| {
+                    v.to_str()
+                        .ok()
+                        .map(|v| (k.as_str().to_string(), v.to_string()))
+                })
                 .collect();
             let host = headers.get("host").and_then(|v| v.to_str().ok());
-            let (group, rewritten_path) = router.match_route(method.as_str(), path, host, &headers_map);
+            let (group, rewritten_path) =
+                router.match_route(method.as_str(), path, host, &headers_map);
             (rewritten_path, Some(group.to_string()))
         } else {
             (path.to_string(), None)
@@ -296,7 +322,10 @@ impl RequestHandler {
             let healthy_count = all_servers.iter().filter(|s| s.is_healthy()).count();
             let total_count = all_servers.len();
 
-            warn!("No healthy backends available. Checked {} backends, {} healthy", total_count, healthy_count);
+            warn!(
+                "No healthy backends available. Checked {} backends, {} healthy",
+                total_count, healthy_count
+            );
             self.metrics.increment_failed_requests();
 
             let error_msg = format!(
@@ -313,7 +342,10 @@ impl RequestHandler {
         }
 
         let server = if let Some(ref backend_addr) = sticky_backend {
-            servers.iter().find(|s| &s.address() == backend_addr).cloned()
+            servers
+                .iter()
+                .find(|s| &s.address() == backend_addr)
+                .cloned()
         } else {
             None
         };
@@ -350,14 +382,20 @@ impl RequestHandler {
             server_to_decrement = Some(current_server.clone());
             let target_uri = format!("http://{}{}", backend_addr, path_query);
 
-            let mut upstream_req = self.http_client.request(
-                method.as_str().parse().unwrap(),
-                &target_uri,
-            );
+            let mut upstream_req = self
+                .http_client
+                .request(method.as_str().parse().unwrap(), &target_uri);
 
             for (name, value) in headers.iter() {
                 if let Ok(val) = value.to_str() {
-                    if !matches!(name.as_str(), "host" | "connection" | "keep-alive" | "transfer-encoding" | "content-length") {
+                    if !matches!(
+                        name.as_str(),
+                        "host"
+                            | "connection"
+                            | "keep-alive"
+                            | "transfer-encoding"
+                            | "content-length"
+                    ) {
                         upstream_req = upstream_req.header(name.as_str(), val);
                     }
                 }
@@ -376,14 +414,18 @@ impl RequestHandler {
 
                     if let Some(ref retry) = self.retry {
                         retry_state.increment(None, Some(status));
-                        if retry.should_retry(retry_state.attempt, Some(status), false) && retry_state.attempt < max_attempts {
+                        if retry.should_retry(retry_state.attempt, Some(status), false)
+                            && retry_state.attempt < max_attempts
+                        {
                             // Decrement and clear the tracked server before retry
                             if let Some(s) = server_to_decrement.take() {
                                 s.decrement_connections();
                             }
                             // For 5xx errors, try a different backend
                             if status >= 500 {
-                                if let Ok(new_server) = self.selector.select(&servers, Some(client_ip)) {
+                                if let Ok(new_server) =
+                                    self.selector.select(&servers, Some(client_ip))
+                                {
                                     if new_server.address() != current_server.address() {
                                         current_server = new_server;
                                     }
@@ -396,26 +438,39 @@ impl RequestHandler {
 
                     self.metrics.increment_successful_requests();
                     let backend_request_duration = backend_request_start.elapsed();
-                    self.metrics.record_backend_request(&backend_addr, true, backend_request_duration);
+                    self.metrics.record_backend_request(
+                        &backend_addr,
+                        true,
+                        backend_request_duration,
+                    );
                     let resp_headers = resp.headers().clone();
                     let body_bytes = resp.bytes().await.unwrap_or_default();
 
                     // Track if upstream already compressed the response
-                    let upstream_encoding = resp_headers.get(CONTENT_ENCODING)
+                    let upstream_encoding = resp_headers
+                        .get(CONTENT_ENCODING)
                         .and_then(|v| v.to_str().ok())
                         .map(|s| s.to_string());
 
                     if let Some(ref cache) = self.cache {
                         if ResponseCache::should_cache(status, method.as_str()) {
-                            if let Some(cc_header) = resp_headers.get("cache-control").and_then(|v| v.to_str().ok()) {
+                            if let Some(cc_header) = resp_headers
+                                .get("cache-control")
+                                .and_then(|v| v.to_str().ok())
+                            {
                                 let cc = ResponseCache::parse_cache_control(cc_header);
                                 if !cc.no_store && !cc.private {
                                     let ttl_secs = cc.s_maxage.or(cc.max_age).unwrap_or(300);
                                     let ttl = Duration::from_secs(ttl_secs);
                                     let cached = CachedResponse {
                                         status,
-                                        headers: resp_headers.iter()
-                                            .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.as_str().to_string(), v.to_string())))
+                                        headers: resp_headers
+                                            .iter()
+                                            .filter_map(|(k, v)| {
+                                                v.to_str().ok().map(|v| {
+                                                    (k.as_str().to_string(), v.to_string())
+                                                })
+                                            })
                                             .collect(),
                                         body: body_bytes.clone(),
                                         created_at: std::time::SystemTime::now()
@@ -425,7 +480,8 @@ impl RequestHandler {
                                         ttl,
                                         content_encoding: upstream_encoding.clone(),
                                     };
-                                    let cache_key = ResponseCache::cache_key(method.as_str(), path, None);
+                                    let cache_key =
+                                        ResponseCache::cache_key(method.as_str(), path, None);
                                     cache.set_with_ttl(cache_key, cached, ttl).await;
                                 }
                             }
@@ -438,9 +494,14 @@ impl RequestHandler {
                     // Only compress if upstream didn't already compress
                     if upstream_encoding.is_none() {
                         if let Some(ref compressor) = self.compression {
-                            if let Some(content_type) = resp_headers.get(CONTENT_TYPE).and_then(|v| v.to_str().ok()) {
+                            if let Some(content_type) =
+                                resp_headers.get(CONTENT_TYPE).and_then(|v| v.to_str().ok())
+                            {
                                 if CompressionMiddleware::should_compress(Some(content_type)) {
-                                    if let Ok(compressed) = compressor.compress(response_body.clone(), compression_algo).await {
+                                    if let Ok(compressed) = compressor
+                                        .compress(response_body.clone(), compression_algo)
+                                        .await
+                                    {
                                         if compressed.len() < response_body.len() {
                                             response_body = compressed;
                                             encoding_header = compression_algo.content_encoding();
@@ -454,7 +515,8 @@ impl RequestHandler {
                     let mut builder = Response::builder().status(status);
 
                     for (name, value) in resp_headers.iter() {
-                        if name.as_str() != "transfer-encoding" && name.as_str() != "content-length" {
+                        if name.as_str() != "transfer-encoding" && name.as_str() != "content-length"
+                        {
                             if let Ok(val) = value.to_str() {
                                 builder = builder.header(name.as_str(), val);
                             }
@@ -471,7 +533,8 @@ impl RequestHandler {
                         if sticky_backend.is_none() {
                             let session_id = sticky.generate_session_id();
                             sticky.set_backend(&session_id, &backend_addr);
-                            builder = builder.header("Set-Cookie", sticky.create_cookie(&session_id));
+                            builder =
+                                builder.header("Set-Cookie", sticky.create_cookie(&session_id));
                         }
                     }
 
@@ -487,9 +550,12 @@ impl RequestHandler {
 
                     if let Some(ref retry) = self.retry {
                         retry_state.increment(Some(e.to_string()), None);
-                        if retry.should_retry(retry_state.attempt, None, true) && retry_state.attempt < max_attempts {
+                        if retry.should_retry(retry_state.attempt, None, true)
+                            && retry_state.attempt < max_attempts
+                        {
                             // For connection errors, try a different backend
-                            if let Ok(new_server) = self.selector.select(&servers, Some(client_ip)) {
+                            if let Ok(new_server) = self.selector.select(&servers, Some(client_ip))
+                            {
                                 if new_server.address() != failed_backend {
                                     current_server = new_server;
                                 }
@@ -501,8 +567,15 @@ impl RequestHandler {
 
                     error!("Backend request failed for {}: {}", failed_backend, e);
                     self.metrics.increment_failed_requests();
-                    self.metrics.record_backend_request(&failed_backend, false, backend_request_duration);
-                    break Ok(Self::error_response(StatusCode::BAD_GATEWAY, &format!("Backend request failed: {}", failed_backend)));
+                    self.metrics.record_backend_request(
+                        &failed_backend,
+                        false,
+                        backend_request_duration,
+                    );
+                    break Ok(Self::error_response(
+                        StatusCode::BAD_GATEWAY,
+                        &format!("Backend request failed: {}", failed_backend),
+                    ));
                 }
             }
         };
@@ -527,12 +600,17 @@ impl RequestHandler {
         // Only compress if the cached response wasn't already compressed
         if cached.content_encoding.is_none() {
             if let Some(ref compressor) = self.compression {
-                let content_type = cached.headers.iter()
+                let content_type = cached
+                    .headers
+                    .iter()
                     .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
                     .map(|(_, v)| v.as_str());
 
                 if CompressionMiddleware::should_compress(content_type) {
-                    if let Ok(compressed) = compressor.compress(response_body.clone(), compression_algo).await {
+                    if let Ok(compressed) = compressor
+                        .compress(response_body.clone(), compression_algo)
+                        .await
+                    {
                         if compressed.len() < response_body.len() {
                             response_body = compressed;
                             encoding_header = compression_algo.content_encoding();
@@ -546,8 +624,10 @@ impl RequestHandler {
 
         for (name, value) in &cached.headers {
             // Skip content-encoding if we're going to add our own
-            if name != "transfer-encoding" && name != "content-length" 
-                && !(name.eq_ignore_ascii_case("content-encoding") && encoding_header.is_some()) {
+            if name != "transfer-encoding"
+                && name != "content-length"
+                && !(name.eq_ignore_ascii_case("content-encoding") && encoding_header.is_some())
+            {
                 builder = builder.header(name.as_str(), value.as_str());
             }
         }
@@ -626,7 +706,12 @@ impl RequestHandler {
             .unwrap()
     }
 
-    fn detailed_error_response(status: StatusCode, message: &str, backends: &[String], next_check: &str) -> Response<Full<Bytes>> {
+    fn detailed_error_response(
+        status: StatusCode,
+        message: &str,
+        backends: &[String],
+        next_check: &str,
+    ) -> Response<Full<Bytes>> {
         let body = serde_json::json!({
             "error": message,
             "unhealthy_backends": backends,

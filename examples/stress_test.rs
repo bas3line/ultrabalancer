@@ -18,7 +18,9 @@ async fn run_stress_test(
 ) -> anyhow::Result<BenchResults> {
     let success = Arc::new(AtomicU64::new(0));
     let failed = Arc::new(AtomicU64::new(0));
-    let latencies = Arc::new(parking_lot::Mutex::new(Vec::with_capacity(requests as usize)));
+    let latencies = Arc::new(parking_lot::Mutex::new(Vec::with_capacity(
+        requests as usize,
+    )));
     let semaphore = Arc::new(Semaphore::new(concurrency));
 
     let client = reqwest::Client::builder()
@@ -67,12 +69,13 @@ async fn run_stress_test(
 
     let duration = start.elapsed();
 
+    let final_latencies = latencies.lock().clone();
     Ok(BenchResults {
         total: requests,
         success: success.load(Ordering::Relaxed),
         failed: failed.load(Ordering::Relaxed),
         duration,
-        latencies: latencies.lock().clone(),
+        latencies: final_latencies,
     })
 }
 
@@ -133,7 +136,10 @@ async fn main() -> anyhow::Result<()> {
     println!("  Avg:              {:.2}ms", avg_latency);
     if !latencies.is_empty() {
         println!("  Min:              {:.2}ms", latencies[0]);
-        println!("  Max:              {:.2}ms", latencies[latencies.len() - 1]);
+        println!(
+            "  Max:              {:.2}ms",
+            latencies[latencies.len() - 1]
+        );
         println!("  p50:              {:.2}ms", percentile(&latencies, 0.50));
         println!("  p90:              {:.2}ms", percentile(&latencies, 0.90));
         println!("  p99:              {:.2}ms", percentile(&latencies, 0.99));

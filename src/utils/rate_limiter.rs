@@ -73,13 +73,13 @@ impl RateLimiter {
         }
 
         if let (Some(map), Some(quota)) = (&self.per_ip, &self.per_ip_quota) {
-            let entry = map
-                .entry(ip.to_string())
-                .or_insert_with(|| IpLimiterEntry {
-                    limiter: Arc::new(GovernorRateLimiter::direct(*quota)),
-                    last_access: AtomicU64::new(Self::current_time_secs()),
-                });
-            entry.last_access.store(Self::current_time_secs(), Ordering::Relaxed);
+            let entry = map.entry(ip.to_string()).or_insert_with(|| IpLimiterEntry {
+                limiter: Arc::new(GovernorRateLimiter::direct(*quota)),
+                last_access: AtomicU64::new(Self::current_time_secs()),
+            });
+            entry
+                .last_access
+                .store(Self::current_time_secs(), Ordering::Relaxed);
             return entry.limiter.check().is_ok();
         }
 
@@ -94,13 +94,13 @@ impl RateLimiter {
         self.wait().await;
 
         if let (Some(map), Some(quota)) = (&self.per_ip, &self.per_ip_quota) {
-            let entry = map
-                .entry(ip.to_string())
-                .or_insert_with(|| IpLimiterEntry {
-                    limiter: Arc::new(GovernorRateLimiter::direct(*quota)),
-                    last_access: AtomicU64::new(Self::current_time_secs()),
-                });
-            entry.last_access.store(Self::current_time_secs(), Ordering::Relaxed);
+            let entry = map.entry(ip.to_string()).or_insert_with(|| IpLimiterEntry {
+                limiter: Arc::new(GovernorRateLimiter::direct(*quota)),
+                last_access: AtomicU64::new(Self::current_time_secs()),
+            });
+            entry
+                .last_access
+                .store(Self::current_time_secs(), Ordering::Relaxed);
             entry.limiter.until_ready().await;
         }
     }
@@ -125,7 +125,11 @@ impl RateLimiter {
 
 /// Starts a background task that periodically cleans up stale per-IP limiters.
 /// Default: runs every 60 seconds, removes limiters idle for > 300 seconds (5 minutes).
-pub fn start_rate_limiter_cleanup_task(limiter: Arc<RateLimiter>, interval_secs: u64, max_idle_secs: u64) {
+pub fn start_rate_limiter_cleanup_task(
+    limiter: Arc<RateLimiter>,
+    interval_secs: u64,
+    max_idle_secs: u64,
+) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
         loop {

@@ -62,9 +62,18 @@ impl Route {
         self
     }
 
-    pub fn matches(&self, method: &str, path: &str, host: Option<&str>, headers: &HashMap<String, String>) -> bool {
+    pub fn matches(
+        &self,
+        method: &str,
+        path: &str,
+        host: Option<&str>,
+        headers: &HashMap<String, String>,
+    ) -> bool {
         if let Some(ref allowed_methods) = self.methods {
-            if !allowed_methods.iter().any(|m| m.eq_ignore_ascii_case(method)) {
+            if !allowed_methods
+                .iter()
+                .any(|m| m.eq_ignore_ascii_case(method))
+            {
                 return false;
             }
         }
@@ -145,7 +154,13 @@ impl Router {
         self.routes.len() < before
     }
 
-    pub fn match_route(&self, method: &str, path: &str, host: Option<&str>, headers: &HashMap<String, String>) -> (&str, String) {
+    pub fn match_route(
+        &self,
+        method: &str,
+        path: &str,
+        host: Option<&str>,
+        headers: &HashMap<String, String>,
+    ) -> (&str, String) {
         for route in &self.routes {
             if route.matches(method, path, host, headers) {
                 let final_path = route.apply_rewrite(path);

@@ -29,7 +29,12 @@ impl RequestId {
     }
 
     pub fn extract_from_headers(headers: &http::HeaderMap) -> Option<String> {
-        for header_name in &["X-Request-ID", "X-Request-Id", "x-request-id", "X-Correlation-ID"] {
+        for header_name in &[
+            "X-Request-ID",
+            "X-Request-Id",
+            "x-request-id",
+            "X-Correlation-ID",
+        ] {
             if let Some(value) = headers.get(*header_name) {
                 if let Ok(s) = value.to_str() {
                     return Some(s.to_string());

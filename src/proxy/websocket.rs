@@ -37,8 +37,10 @@ impl WebSocketProxy {
         let (client_write, client_read) = client_stream.split();
         let (backend_write, backend_read) = backend_stream.split();
 
-        let client_to_backend = Self::forward_messages(client_read, backend_write, "client->backend");
-        let backend_to_client = Self::forward_messages(backend_read, client_write, "backend->client");
+        let client_to_backend =
+            Self::forward_messages(client_read, backend_write, "client->backend");
+        let backend_to_client =
+            Self::forward_messages(backend_read, client_write, "backend->client");
 
         tokio::select! {
             result = client_to_backend => {

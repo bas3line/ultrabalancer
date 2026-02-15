@@ -68,8 +68,10 @@ struct BenchmarkState {
 }
 
 pub async fn run_benchmark(config: BenchmarkConfig) -> anyhow::Result<BenchmarkResults> {
-    info!("Starting benchmark: {} requests with {} concurrent connections",
-          config.total_requests, config.concurrency);
+    info!(
+        "Starting benchmark: {} requests with {} concurrent connections",
+        config.total_requests, config.concurrency
+    );
     info!("Target: {}", config.target_url);
 
     let state = Arc::new(BenchmarkState {
@@ -78,14 +80,20 @@ pub async fn run_benchmark(config: BenchmarkConfig) -> anyhow::Result<BenchmarkR
         failed: AtomicU64::new(0),
     });
 
-    let latencies = Arc::new(parking_lot::Mutex::new(Vec::with_capacity(config.total_requests as usize)));
+    let latencies = Arc::new(parking_lot::Mutex::new(Vec::with_capacity(
+        config.total_requests as usize,
+    )));
     let semaphore = Arc::new(Semaphore::new(config.concurrency));
 
     let client = reqwest::Client::builder()
         .pool_max_idle_per_host(config.concurrency)
         .timeout(Duration::from_millis(config.timeout_ms))
         .pool_idle_timeout(Duration::from_secs(90))
-        .tcp_keepalive(if config.keep_alive { Some(Duration::from_secs(60)) } else { None })
+        .tcp_keepalive(if config.keep_alive {
+            Some(Duration::from_secs(60))
+        } else {
+            None
+        })
         .build()?;
 
     let start = Instant::now();
@@ -174,8 +182,15 @@ pub async fn run_benchmark(config: BenchmarkConfig) -> anyhow::Result<BenchmarkR
     })
 }
 
-pub async fn stress_test(target: &str, target_rps: u64, duration_secs: u64) -> anyhow::Result<BenchmarkResults> {
-    info!("Starting stress test: target {}+ RPS for {}s", target_rps, duration_secs);
+pub async fn stress_test(
+    target: &str,
+    target_rps: u64,
+    duration_secs: u64,
+) -> anyhow::Result<BenchmarkResults> {
+    info!(
+        "Starting stress test: target {}+ RPS for {}s",
+        target_rps, duration_secs
+    );
 
     let concurrency = (target_rps / 100).clamp(500, 10000) as usize;
 

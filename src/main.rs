@@ -16,9 +16,9 @@ mod utils;
 
 use crate::admin::dashboard::{DashboardConfig, DashboardManager};
 use crate::backend::{HealthChecker, Server, ServerPool};
-use crate::config::HealthCheckConfig;
 use crate::balancer::{Algorithm, LoadBalancerSelector};
 use crate::config::Config;
+use crate::config::HealthCheckConfig;
 use crate::metrics::MetricsCollector;
 use crate::proxy::ProxyServer;
 use anyhow::{Context, Result};
@@ -158,10 +158,7 @@ fn get_styles() -> clap::builder::Styles {
 async fn main() -> Result<()> {
     tracing_subscriber::registry()
         .with(fmt::layer().with_target(false).compact())
-        .with(
-            EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into())
-        )
+        .with(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
         .init();
 
     let cli = Cli::parse();
@@ -212,7 +209,8 @@ async fn main() -> Result<()> {
                 ultrabalancer_port,
                 prometheus_port,
                 grafana_port,
-            ).await?;
+            )
+            .await?;
         }
         None => {
             if let Some(config_path) = cli.config {
@@ -239,18 +237,23 @@ async fn execute_start(
 ) -> Result<()> {
     print_banner();
 
-    let algo = Algorithm::from_str(&algorithm)
-        .context(format!("Invalid algorithm: {}", algorithm))?;
+    let algo =
+        Algorithm::from_str(&algorithm).context(format!("Invalid algorithm: {}", algorithm))?;
 
-    let server_list: Result<Vec<Server>> = backends
-        .iter()
-        .map(|b| parse_backend(b, weight))
-        .collect();
+    let server_list: Result<Vec<Server>> =
+        backends.iter().map(|b| parse_backend(b, weight)).collect();
 
     info!("⚙️  Configuration:");
     info!("   Algorithm: {}", algo.as_str());
     info!("   Listen: 0.0.0.0:{}", port);
-    info!("   Health Checks: {}", if health_enabled { "✓ enabled" } else { "✗ disabled" });
+    info!(
+        "   Health Checks: {}",
+        if health_enabled {
+            "✓ enabled"
+        } else {
+            "✗ disabled"
+        }
+    );
 
     execute_load_balancer(
         format!("0.0.0.0:{}", port),
@@ -280,7 +283,14 @@ async fn execute_with_cli_args(cli: Cli) -> Result<()> {
     info!("⚙️  Configuration:");
     info!("   Algorithm: {}", algo.as_str());
     info!("   Listen: {}:{}", cli.host, cli.port);
-    info!("   Health Checks: {}", if health_enabled { "✓ enabled" } else { "✗ disabled" });
+    info!(
+        "   Health Checks: {}",
+        if health_enabled {
+            "✓ enabled"
+        } else {
+            "✗ disabled"
+        }
+    );
 
     execute_load_balancer(
         format!("{}:{}", cli.host, cli.port),
@@ -311,7 +321,10 @@ async fn execute_with_config_file(path: &str) -> Result<()> {
 
     info!("⚙️  Configuration:");
     info!("   Algorithm: {}", algo.as_str());
-    info!("   Listen: {}:{}", config.listen_address, config.listen_port);
+    info!(
+        "   Listen: {}:{}",
+        config.listen_address, config.listen_port
+    );
 
     execute_load_balancer(
         format!("{}:{}", config.listen_address, config.listen_port),
@@ -344,7 +357,7 @@ async fn execute_load_balancer(
     let pool = ServerPool::new(servers.clone());
     let selector = LoadBalancerSelector::new(algorithm);
     let metrics = Arc::new(MetricsCollector::new());
-    
+
     let backend_addresses: Vec<String> = servers.iter().map(|s| s.address()).collect();
     metrics.init_backends(&backend_addresses);
 
@@ -362,12 +375,7 @@ async fn execute_load_balancer(
 
     let health_checker = Arc::new(HealthChecker::new(pool.clone(), health_config));
 
-    let proxy = Arc::new(ProxyServer::new(
-        selector,
-        pool,
-        metrics,
-        listen_addr,
-    ));
+    let proxy = Arc::new(ProxyServer::new(selector, pool, metrics, listen_addr));
 
     tokio::spawn(async move {
         health_checker.start().await;
@@ -461,6 +469,7 @@ fn execute_info() {
     println!("  * Built-in Grafana/Prometheus dashboard");
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn execute_dashboard(
     start: bool,
     stop: bool,
@@ -487,17 +496,40 @@ async fn execute_dashboard(
             if line.starts_with("ULTRABALANCER_HOST=") {
                 c.ultrabalancer_host = line.split('=').nth(1).unwrap_or("localhost").to_string();
             } else if line.starts_with("ULTRABALANCER_PORT=") {
-                c.ultrabalancer_port = line.split('=').nth(1).unwrap_or("8080").parse().unwrap_or(8080);
+                c.ultrabalancer_port = line
+                    .split('=')
+                    .nth(1)
+                    .unwrap_or("8080")
+                    .parse()
+                    .unwrap_or(8080);
             } else if line.starts_with("PROMETHEUS_PORT=") {
-                c.prometheus_port = line.split('=').nth(1).unwrap_or("9090").parse().unwrap_or(9090);
+                c.prometheus_port = line
+                    .split('=')
+                    .nth(1)
+                    .unwrap_or("9090")
+                    .parse()
+                    .unwrap_or(9090);
             } else if line.starts_with("GRAFANA_PORT=") {
-                c.grafana_port = line.split('=').nth(1).unwrap_or("3000").parse().unwrap_or(3000);
+                c.grafana_port = line
+                    .split('=')
+                    .nth(1)
+                    .unwrap_or("3000")
+                    .parse()
+                    .unwrap_or(3000);
             } else if line.starts_with("GRAFANA_USER=") {
                 c.grafana_user = line.split('=').nth(1).unwrap_or("admin").to_string();
             } else if line.starts_with("COMPOSE_PROJECT_NAME=") {
-                c.project_name = line.split('=').nth(1).unwrap_or("ultrabalancer-dashboard").to_string();
+                c.project_name = line
+                    .split('=')
+                    .nth(1)
+                    .unwrap_or("ultrabalancer-dashboard")
+                    .to_string();
             } else if line.starts_with("DOCKER_NETWORK=") {
-                c.docker_network = line.split('=').nth(1).unwrap_or("ultrabalancer-net").to_string();
+                c.docker_network = line
+                    .split('=')
+                    .nth(1)
+                    .unwrap_or("ultrabalancer-net")
+                    .to_string();
             }
         }
         c
@@ -554,7 +586,10 @@ async fn execute_dashboard(
 
 fn print_banner() {
     println!("\n╔══════════════════════════════════════════╗");
-    println!("║      UltraBalancer v{}                ║", env!("CARGO_PKG_VERSION"));
+    println!(
+        "║      UltraBalancer v{}                ║",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("║  Production Load Balancer                ║");
     println!("╚══════════════════════════════════════════╝\n");
 }

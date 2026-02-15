@@ -80,7 +80,10 @@ pub struct CompressionMiddleware {
 
 impl CompressionMiddleware {
     pub fn new(min_size: usize, level: u32) -> Self {
-        Self { min_size, _level: level }
+        Self {
+            min_size,
+            _level: level,
+        }
     }
 
     pub async fn compress(&self, data: Bytes, algo: CompressionAlgo) -> anyhow::Result<Bytes> {

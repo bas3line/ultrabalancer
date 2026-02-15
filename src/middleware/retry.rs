@@ -2,7 +2,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 /// Configuration for retry behavior.
-/// 
+///
 /// `max_attempts` defines the maximum number of total attempts (including the initial request).
 /// For example, `max_attempts = 3` means: 1 initial request + up to 2 retries.
 #[derive(Clone)]
@@ -40,7 +40,7 @@ impl RetryMiddleware {
     }
 
     /// Determines if a retry should be attempted.
-    /// 
+    ///
     /// `attempt` is the current attempt number (1-indexed after increment).
     /// Returns true if retry is warranted and we haven't exceeded max_attempts.
     pub fn should_retry(&self, attempt: u32, status: Option<u16>, is_error: bool) -> bool {
@@ -64,8 +64,8 @@ impl RetryMiddleware {
     /// Wait before retry attempt. Called with attempt=0 for first retry, attempt=1 for second, etc.
     /// Delay: initial_delay_ms * multiplier^attempt (e.g., 100ms, 200ms, 400ms for multiplier=2)
     pub async fn wait(&self, attempt: u32) {
-        let base_delay = self.config.initial_delay_ms as f64
-            * self.config.multiplier.powi(attempt as i32);
+        let base_delay =
+            self.config.initial_delay_ms as f64 * self.config.multiplier.powi(attempt as i32);
         let capped_delay = base_delay.min(self.config.max_delay_ms as f64);
 
         let delay = if self.config.jitter {

@@ -279,6 +279,6 @@ impl MetricsExporter {
     }
 
     fn sanitize_label(label: &str) -> String {
-        label.replace('"', "_").replace(' ', "_").replace(':', "_")
+        label.replace(['"', ' ', ':'], "_")
     }
 }

@@ -1,10 +1,10 @@
 use bytes::Bytes;
+use fastrand;
 use http_body_util::Full;
 use hyper::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use fastrand;
 
 pub mod dashboard;
 
@@ -98,7 +98,9 @@ impl<M: BackendManager> AdminApi<M> {
     }
 
     pub fn generate_api_key() -> String {
-        let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chars().collect();
+        let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+            .chars()
+            .collect();
         let mut key = String::from("ub_");
         let mut rng = fastrand::Rng::new();
         for _ in 0..32 {
@@ -141,16 +143,14 @@ impl<M: BackendManager> AdminApi<M> {
                 .get("X-API-Key")
                 .and_then(|v| v.to_str().ok())
                 .or_else(|| {
-                    req.uri()
-                        .query()
-                        .and_then(|q| {
-                            if let Some(pos) = q.find("api_key=") {
-                                let val = &q[pos + 8..];
-                                Some(val.split('&').next()?.trim())
-                            } else {
-                                None
-                            }
-                        })
+                    req.uri().query().and_then(|q| {
+                        if let Some(pos) = q.find("api_key=") {
+                            let val = &q[pos + 8..];
+                            Some(val.split('&').next()?.trim())
+                        } else {
+                            None
+                        }
+                    })
                 });
 
             if !auth.map(|a| self.is_key_valid(a)).unwrap_or(false) {
@@ -174,7 +174,10 @@ impl<M: BackendManager> AdminApi<M> {
             ("GET", "/admin/health") => self.health_check(),
             ("POST", "/admin/reload") => self.reload_config(),
             ("GET", "/admin/metrics") => self.get_metrics(),
-            _ => self.json_response(StatusCode::NOT_FOUND, &AdminResponse::error("Endpoint not found")),
+            _ => self.json_response(
+                StatusCode::NOT_FOUND,
+                &AdminResponse::error("Endpoint not found"),
+            ),
         }
     }
 
@@ -190,91 +193,144 @@ impl<M: BackendManager> AdminApi<M> {
     async fn add_backend(&self, req: Request<hyper::body::Incoming>) -> Response<Full<Bytes>> {
         let body = match self.read_body(req).await {
             Ok(b) => b,
-            Err(e) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e)),
+            Err(e) => {
+                return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e))
+            }
         };
 
         let request: AddBackendRequest = match serde_json::from_slice(&body) {
             Ok(r) => r,
-            Err(_) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error("Invalid JSON")),
+            Err(_) => {
+                return self.json_response(
+                    StatusCode::BAD_REQUEST,
+                    &AdminResponse::error("Invalid JSON"),
+                )
+            }
         };
 
         let weight = request.weight.unwrap_or(100);
         if self.manager.add_backend(&request.address, weight) {
             self.json_response(StatusCode::OK, &AdminResponse::success("Backend added"))
         } else {
-            self.json_response(StatusCode::CONFLICT, &AdminResponse::error("Backend already exists"))
+            self.json_response(
+                StatusCode::CONFLICT,
+                &AdminResponse::error("Backend already exists"),
+            )
         }
     }
 
     async fn remove_backend(&self, req: Request<hyper::body::Incoming>) -> Response<Full<Bytes>> {
         let body = match self.read_body(req).await {
             Ok(b) => b,
-            Err(e) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e)),
+            Err(e) => {
+                return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e))
+            }
         };
 
         let request: RemoveBackendRequest = match serde_json::from_slice(&body) {
             Ok(r) => r,
-            Err(_) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error("Invalid JSON")),
+            Err(_) => {
+                return self.json_response(
+                    StatusCode::BAD_REQUEST,
+                    &AdminResponse::error("Invalid JSON"),
+                )
+            }
         };
 
         if self.manager.remove_backend(&request.address) {
             self.json_response(StatusCode::OK, &AdminResponse::success("Backend removed"))
         } else {
-            self.json_response(StatusCode::NOT_FOUND, &AdminResponse::error("Backend not found"))
+            self.json_response(
+                StatusCode::NOT_FOUND,
+                &AdminResponse::error("Backend not found"),
+            )
         }
     }
 
     async fn update_weight(&self, req: Request<hyper::body::Incoming>) -> Response<Full<Bytes>> {
         let body = match self.read_body(req).await {
             Ok(b) => b,
-            Err(e) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e)),
+            Err(e) => {
+                return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e))
+            }
         };
 
         let request: UpdateWeightRequest = match serde_json::from_slice(&body) {
             Ok(r) => r,
-            Err(_) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error("Invalid JSON")),
+            Err(_) => {
+                return self.json_response(
+                    StatusCode::BAD_REQUEST,
+                    &AdminResponse::error("Invalid JSON"),
+                )
+            }
         };
 
         if self.manager.update_weight(&request.address, request.weight) {
             self.json_response(StatusCode::OK, &AdminResponse::success("Weight updated"))
         } else {
-            self.json_response(StatusCode::NOT_FOUND, &AdminResponse::error("Backend not found"))
+            self.json_response(
+                StatusCode::NOT_FOUND,
+                &AdminResponse::error("Backend not found"),
+            )
         }
     }
 
     async fn drain_backend(&self, req: Request<hyper::body::Incoming>) -> Response<Full<Bytes>> {
         let body = match self.read_body(req).await {
             Ok(b) => b,
-            Err(e) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e)),
+            Err(e) => {
+                return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e))
+            }
         };
 
         let request: RemoveBackendRequest = match serde_json::from_slice(&body) {
             Ok(r) => r,
-            Err(_) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error("Invalid JSON")),
+            Err(_) => {
+                return self.json_response(
+                    StatusCode::BAD_REQUEST,
+                    &AdminResponse::error("Invalid JSON"),
+                )
+            }
         };
 
         if self.manager.drain_backend(&request.address) {
             self.json_response(StatusCode::OK, &AdminResponse::success("Backend draining"))
         } else {
-            self.json_response(StatusCode::NOT_FOUND, &AdminResponse::error("Backend not found"))
+            self.json_response(
+                StatusCode::NOT_FOUND,
+                &AdminResponse::error("Backend not found"),
+            )
         }
     }
 
     async fn undrain_backend(&self, req: Request<hyper::body::Incoming>) -> Response<Full<Bytes>> {
         let body = match self.read_body(req).await {
             Ok(b) => b,
-            Err(e) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e)),
+            Err(e) => {
+                return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error(&e))
+            }
         };
 
         let request: RemoveBackendRequest = match serde_json::from_slice(&body) {
             Ok(r) => r,
-            Err(_) => return self.json_response(StatusCode::BAD_REQUEST, &AdminResponse::error("Invalid JSON")),
+            Err(_) => {
+                return self.json_response(
+                    StatusCode::BAD_REQUEST,
+                    &AdminResponse::error("Invalid JSON"),
+                )
+            }
         };
 
         if self.manager.undrain_backend(&request.address) {
-            self.json_response(StatusCode::OK, &AdminResponse::success("Backend undraining"))
+            self.json_response(
+                StatusCode::OK,
+                &AdminResponse::success("Backend undraining"),
+            )
         } else {
-            self.json_response(StatusCode::NOT_FOUND, &AdminResponse::error("Backend not found"))
+            self.json_response(
+                StatusCode::NOT_FOUND,
+                &AdminResponse::error("Backend not found"),
+            )
         }
     }
 
@@ -283,7 +339,10 @@ impl<M: BackendManager> AdminApi<M> {
     }
 
     fn reload_config(&self) -> Response<Full<Bytes>> {
-        self.json_response(StatusCode::OK, &AdminResponse::success("Config reload triggered"))
+        self.json_response(
+            StatusCode::OK,
+            &AdminResponse::success("Config reload triggered"),
+        )
     }
 
     fn get_metrics(&self) -> Response<Full<Bytes>> {

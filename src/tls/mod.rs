@@ -23,7 +23,10 @@ impl TlsConfig {
     }
 
     pub fn with_alpn(mut self, protocols: Vec<&str>) -> Self {
-        self.alpn_protocols = protocols.into_iter().map(|p| p.as_bytes().to_vec()).collect();
+        self.alpn_protocols = protocols
+            .into_iter()
+            .map(|p| p.as_bytes().to_vec())
+            .collect();
         self
     }
 }
@@ -65,9 +68,7 @@ impl Clone for TlsProvider {
 fn load_certs(path: &str) -> anyhow::Result<Vec<CertificateDer<'static>>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
-    let certs: Vec<CertificateDer<'static>> = certs(&mut reader)
-        .filter_map(|c| c.ok())
-        .collect();
+    let certs: Vec<CertificateDer<'static>> = certs(&mut reader).filter_map(|c| c.ok()).collect();
 
     if certs.is_empty() {
         anyhow::bail!("No certificates found in {}", path);
@@ -80,6 +81,5 @@ fn load_key(path: &str) -> anyhow::Result<PrivateKeyDer<'static>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
 
-    private_key(&mut reader)?
-        .ok_or_else(|| anyhow::anyhow!("No private key found in {}", path))
+    private_key(&mut reader)?.ok_or_else(|| anyhow::anyhow!("No private key found in {}", path))
 }

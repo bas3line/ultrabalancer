@@ -24,12 +24,7 @@ pub struct AccessLogEntry {
 }
 
 impl AccessLogEntry {
-    pub fn new(
-        client_addr: SocketAddr,
-        method: &str,
-        uri: &str,
-        request_id: String,
-    ) -> Self {
+    pub fn new(client_addr: SocketAddr, method: &str, uri: &str, request_id: String) -> Self {
         Self {
             timestamp: Utc::now(),
             client_ip: client_addr.ip().to_string(),
@@ -126,7 +121,10 @@ impl AccessLogger {
                 {
                     Ok(f) => Some(f),
                     Err(e) => {
-                        error!("Failed to open access log file '{}': {}, falling back to stdout", path, e);
+                        error!(
+                            "Failed to open access log file '{}': {}, falling back to stdout",
+                            path, e
+                        );
                         None
                     }
                 }

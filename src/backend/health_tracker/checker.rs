@@ -1,7 +1,7 @@
+use super::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 use crate::backend::pool::ServerPool;
 use crate::backend::server::Server;
 use crate::config::HealthCheckConfig;
-use super::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -87,7 +87,10 @@ impl HealthChecker {
 
         if let Some(ref cb) = circuit_breaker {
             if !cb.is_available() {
-                debug!("Circuit breaker OPEN for {}, skipping health check", server.address());
+                debug!(
+                    "Circuit breaker OPEN for {}, skipping health check",
+                    server.address()
+                );
                 return;
             }
         }
@@ -160,7 +163,8 @@ impl HealthChecker {
                     cb.record_failure();
                 }
 
-                self.handle_failure(server, was_healthy, e.to_string()).await;
+                self.handle_failure(server, was_healthy, e.to_string())
+                    .await;
             }
         }
     }

@@ -77,7 +77,7 @@ impl LoadBalancerSelector {
             LoadBalancerSelector::IpHash(selector) => {
                 let ip = client_ip.unwrap_or("0.0.0.0");
                 selector.select(servers, ip)
-            },
+            }
             LoadBalancerSelector::Random(selector) => selector.select(servers),
             LoadBalancerSelector::WeightedRoundRobin(selector) => selector.select(servers),
             LoadBalancerSelector::PowerOfTwo(selector) => selector.select(servers),

@@ -1,9 +1,9 @@
-pub mod compression;
 pub mod access_log;
-pub mod retry;
+pub mod compression;
 pub mod ip_filter;
+pub mod retry;
 
-pub use compression::{CompressionMiddleware, CompressionAlgo};
-pub use access_log::{AccessLogger, AccessLogEntry, LogFormat};
-pub use retry::{RetryMiddleware, RetryConfig, RetryState};
+pub use access_log::{AccessLogEntry, AccessLogger, LogFormat};
+pub use compression::{CompressionAlgo, CompressionMiddleware};
 pub use ip_filter::IpFilter;
+pub use retry::{RetryConfig, RetryMiddleware, RetryState};
