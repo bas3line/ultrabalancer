@@ -4,22 +4,46 @@
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
 [![CI](https://github.com/bas3line/ultrabalancer/actions/workflows/ci.yml/badge.svg)](https://github.com/bas3line/ultrabalancer/actions)
 
-Production-grade, high-performance load balancer written in Rust.
+Production-grade, high-performance load balancer written in Rust. Capable of 500K+ requests per second.
+
+## Installation
+
+### Quick Install (Recommended)
+```bash
+curl -L https://package.ultrabalancer.com/install.sh | bash
+```
+
+### From Source
+```bash
+cargo install ultrabalancer
+```
+
+Or build from source:
+```bash
+cargo build --release
+```
 
 ## Quick Start
 
 ```bash
-# Install
-cargo install --path .
-
-# Start with backends
 ultrabalancer start round-robin 10.0.1.10:8080 10.0.1.11:8080
 ```
 
-Or use a config file:
+With config file:
 ```bash
 ultrabalancer -c config.yaml
 ```
+
+## Package Server
+
+Self-hosted package distribution at [package.ultrabalancer.com](https://package.ultrabalancer.com)
+
+Available packages:
+- Linux x86_64
+- Linux ARM64
+- macOS x86_64
+- macOS ARM64 (Apple Silicon)
+- Windows x86_64
 
 ## Documentation
 
@@ -42,13 +66,16 @@ _Benchmark: 10,000 concurrent connections, 30s duration_
 - Multiple algorithms: Round Robin, Least Connections, IP Hash, Random, Weighted
 - Health checking with automatic failover
 - Real-time metrics at `/metrics` and `/health`
+- Admin API for dynamic backend management
 - Async Tokio runtime for maximum performance
 
 ## Links
 
 - Website: [ultrabalancer.com](https://ultrabalancer.com)
+- Package Server: [package.ultrabalancer.com](https://package.ultrabalancer.com)
 - Docs: [docs.ultrabalancer.com](https://docs.ultrabalancer.com)
-- Email: [hi@ultrabalancer.com](mailto:hi@ultrabalancer.com)
+- Contact: [hi@ultrabalancer.com](mailto:hi@ultrabalancer.com)
+- GitHub: [github.com/bas3line/ultrabalancer](https://github.com/bas3line/ultrabalancer)
 
 ## License
 
