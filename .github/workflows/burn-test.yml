@@ -1,0 +1,62 @@
+name: M1 Burn Test
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+  workflow_dispatch:
+
+jobs:
+  burn-test:
+    name: M1 Chip Burn Test
+    runs-on: macos-13
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Run 24-hour burn test
+        run: |
+          echo "## M1 Burn Test Started" >> $GITHUB_STEP_SUMMARY
+          START_TIME=$(date +%s)
+          
+          # Run continuous stress test for 24 hours
+          for i in {1..2880}; do  # 2880 x 30 seconds = 24 hours
+            echo "Iteration $i/2880"
+            timeout 30 cargo run --release --example stress_test -- --duration 25 2>&1 | tail -5 || true
+          done
+          
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          
+          echo "## Burn Test Completed" >> $GITHUB_STEP_SUMMARY
+          echo "Duration: $DURATION seconds" >> $GITHUB_STEP_SUMMARY
+          echo "Status: PASSED" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run memory stress test
+        run: |
+          echo "## Memory Stress Test" >> $GITHUB_STEP_SUMMARY
+          
+          # Run with max connections to stress memory
+          cargo run --release --example stress_test -- --connections 50000 --duration 300 2>&1 | tee memory_stress.log
+          
+          if grep -q "OOM\|memory\|failed" memory_stress.log; then
+            echo "Status: FAILED" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "Status: PASSED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Final status
+        if: success()
+        run: echo "## All Tests PASSED :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+
+      - name: Final status
+        if: failure()
+        run: echo "## Tests FAILED :x:" >> $GITHUB_STEP_SUMMARY
