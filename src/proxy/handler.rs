@@ -344,9 +344,10 @@ impl RequestHandler {
 
         let response = loop {
             let backend_request_start = Instant::now();
-            current_server.increment_connections();
-            server_to_decrement = Some(current_server.clone());
             let backend_addr = current_server.address();
+            current_server.increment_connections();
+            self.metrics.increment_backend_connections(&backend_addr);
+            server_to_decrement = Some(current_server.clone());
             let target_uri = format!("http://{}{}", backend_addr, path_query);
 
             let mut upstream_req = self.http_client.request(
@@ -509,6 +510,8 @@ impl RequestHandler {
         // Decrement connection count for the server that handled the final request
         if let Some(server) = server_to_decrement {
             server.decrement_connections();
+            let addr = server.address();
+            self.metrics.decrement_backend_connections(&addr);
         }
         response
     }

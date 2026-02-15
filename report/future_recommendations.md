@@ -6,25 +6,27 @@ Based on testing on server 52.66.13.19, here are recommendations for future deve
 
 ---
 
-## Priority 1: observability Improvements
+## Priority 1: Completed Items
 
-### 1.1 Per-Backend Metrics
-Currently `/metrics` returns empty `backend_metrics: {}`
+### 1.1 Per-Backend Metrics ✅ FIXED
+The backend_metrics empty issue has been resolved:
+- Backend metrics are now initialized at startup for all configured backends
+- Per-backend request counts, errors, and response times are tracked
+- Active connections per backend are now visible in /metrics endpoint
+- Backend status (up/down) is tracked and exposed
 
-**Add:**
-- Requests count per backend
-- Errors per backend
-- Response time per backend
-- Active connections per backend
-
-**Example:**
+**Current Output:**
 ```json
 {
   "backend_metrics": {
     "127.0.0.1:8001": {
-      "requests": 100,
-      "errors": 2,
-      "avg_response_ms": 1.5
+      "total_requests": 100,
+      "successful_requests": 98,
+      "failed_requests": 2,
+      "avg_response_time_ms": 1.5,
+      "active_connections": 5,
+      "last_response_time_ms": 1.2,
+      "status": "up"
     }
   }
 }
@@ -32,7 +34,31 @@ Currently `/metrics` returns empty `backend_metrics: {}`
 
 ---
 
-### 1.2 Better Logging
+## Priority 2: Runtime Management
+
+### 2.1 Admin API (In Progress)
+Add endpoints for runtime configuration:
+
+- `GET /api/backends` - List all backends with status
+- `POST /api/backends` - Add backend
+- `DELETE /api/backends/:id` - Remove backend
+- `PUT /api/backends/:id/weight` - Update backend weight
+- `POST /api/backends/:id/drain` - Drain connections
+- `POST /api/backends/:id/undrain` - Restore backend
+- `GET /api/status` - Detailed status
+- `POST /api/reload` - Hot reload config
+
+### 2.2 Dynamic Backend Changes
+Allow adding/removing backends without restart:
+- Zero-downtime backend changes
+- Weight adjustments at runtime
+- Health check interval changes
+
+---
+
+## Priority 3: Observability Improvements
+
+### 3.1 Better Logging
 Add structured JSON logging option
 
 **Include:**
@@ -41,90 +67,52 @@ Add structured JSON logging option
 - Health check failures
 - Error details
 
----
-
-## Priority 2: Runtime Management
-
-### 2.1 Admin API
-Add endpoints for runtime configuration:
-
-- `POST /api/backends` - Add backend
-- `DELETE /api/backends/:id` - Remove backend
-- `GET /api/status` - Detailed status
-- `POST /api/reload` - Hot reload config
+### 3.2 Circuit Breaker Metrics
+Expand circuit breaker functionality:
+- Metrics endpoint for breaker state
+- Configurable thresholds
+- Automatic recovery testing
 
 ---
 
-### 2.2 Dynamic Backend Changes
-Allow adding/removing backends without restart
+## Priority 4: Advanced Features
 
-- Zero-downtime backend changes
-- Weight adjustments at runtime
-- Health check interval changes
-
----
-
-## Priority 3: Advanced Features
-
-### 3.1 TLS/SSL Termination
-Add HTTPS support
-
+### 4.1 TLS/SSL Termination
+Add HTTPS support:
 - Certificate configuration
 - SNI support
 - TLS 1.3 support
 
----
-
-### 3.2 WebSocket Support
-Test and verify WebSocket proxying
-
+### 4.2 WebSocket Support
+Test and verify WebSocket proxying:
 - Connection upgrade handling
 - Session stickiness for WebSockets
 - Idle timeout configuration
 
----
-
-### 3.3 Rate Limiting
-Add per-route or per-client rate limiting
-
+### 4.3 Rate Limiting
+Add per-route or per-client rate limiting:
 - Token bucket algorithm
 - Sliding window counters
 - Configurable limits per backend
 
 ---
 
-### 3.4 Circuit Breaker Improvements
-Expand circuit breaker functionality
+## Priority 5: Production Hardening
 
-- Configurable thresholds
-- Metrics endpoint for breaker state
-- Automatic recovery testing
-
----
-
-## Priority 4: Production Hardening
-
-### 4.1 Multi-Process Support
-Like HAProxy's nbproc
-
+### 5.1 Multi-Process Support
+Like HAProxy's nbproc:
 - Multiple worker processes
 - Better CPU utilization
 - Process isolation
 
----
-
-### 4.2 Clustering Support
-For horizontal scaling
-
+### 5.2 Clustering Support
+For horizontal scaling:
 - Member discovery
 - Configuration synchronization
 - Distributed health checks
 
----
-
-### 4.3 Graceful Shutdown
-Improve signal handling
-
+### 5.3 Graceful Shutdown
+Improve signal handling:
 - SIGTERM graceful shutdown
 - Connection draining
 - Health check pause during shutdown
@@ -140,8 +128,6 @@ Add integration tests for:
 - Backend recovery
 - Config validation edge cases
 - Concurrent request handling
-
----
 
 ### Load Testing
 Run benchmarks with:
@@ -160,16 +146,12 @@ Add more examples for:
 - Multiple backends with health checks
 - Config file examples
 
----
-
 ### 2. Architecture Documentation
 Add diagrams showing:
 - Request flow
 - Health check timing
 - Failover process
 - Metric collection
-
----
 
 ### 3. Troubleshooting Guide
 Add common issues:
@@ -184,11 +166,23 @@ Add common issues:
 
 | Category | Priority | Items |
 |----------|----------|-------|
-| Observability | High | Per-backend metrics, better logging |
+| Completed | Done | Per-backend metrics |
 | Runtime Management | High | Admin API, dynamic backends |
+| Observability | Medium | Better logging, circuit breaker metrics |
 | Advanced Features | Medium | TLS, WebSocket, rate limiting |
 | Production | Medium | Multi-process, clustering |
 | Testing | Medium | Load tests, integration tests |
 | Documentation | Low | Examples, architecture, troubleshooting |
 
-**Total Future Items:** 15+ features and improvements identified
+**Completed Items:** 1
+**Remaining Items:** 15+ features and improvements identified
+
+---
+
+## Recent Changes (v3.0.1)
+
+1. **Fixed:** Backend metrics now show per-backend data in /metrics endpoint
+2. **Fixed:** Backend connection tracking implemented
+3. **Fixed:** Backend status (healthy/unhealthy) now reflected in metrics
+4. **Added:** `init_backends()` method to initialize metrics at startup
+5. **Added:** `update_backend_status()` method for health check integration

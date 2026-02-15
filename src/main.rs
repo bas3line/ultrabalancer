@@ -341,9 +341,12 @@ async fn execute_load_balancer(
         info!("   → {} [weight: {}]", server.address(), server.weight());
     }
 
-    let pool = ServerPool::new(servers);
+    let pool = ServerPool::new(servers.clone());
     let selector = LoadBalancerSelector::new(algorithm);
     let metrics = Arc::new(MetricsCollector::new());
+    
+    let backend_addresses: Vec<String> = servers.iter().map(|s| s.address()).collect();
+    metrics.init_backends(&backend_addresses);
 
     let health_config = HealthCheckConfig {
         enabled: health_enabled,

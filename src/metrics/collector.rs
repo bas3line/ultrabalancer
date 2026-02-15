@@ -38,6 +38,7 @@ struct BackendMetricsData {
     failed_requests: Arc<AtomicU64>,
     response_times: Arc<RwLock<Vec<Duration>>>,
     active_connections: Arc<AtomicU32>,
+    status: Arc<RwLock<String>>,
 }
 
 impl BackendMetricsData {
@@ -48,7 +49,12 @@ impl BackendMetricsData {
             failed_requests: Arc::new(AtomicU64::new(0)),
             response_times: Arc::new(RwLock::new(Vec::with_capacity(1000))),
             active_connections: Arc::new(AtomicU32::new(0)),
+            status: Arc::new(RwLock::new("up".to_string())),
         }
+    }
+
+    fn set_status(&self, status: &str) {
+        *self.status.write() = status.to_string();
     }
 
     fn increment_connections(&self) {
@@ -72,6 +78,7 @@ impl Clone for BackendMetricsData {
             failed_requests: Arc::clone(&self.failed_requests),
             response_times: Arc::clone(&self.response_times),
             active_connections: Arc::clone(&self.active_connections),
+            status: Arc::clone(&self.status),
         }
     }
 }
@@ -98,6 +105,15 @@ impl MetricsCollector {
             response_times: Arc::new(RwLock::new(Vec::with_capacity(10000))),
             start_time: Instant::now(),
             backend_metrics: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn init_backends(&self, backends: &[String]) {
+        let mut backends_lock = self.backend_metrics.write();
+        for backend in backends {
+            backends_lock
+                .entry(backend.clone())
+                .or_insert_with(BackendMetricsData::new);
         }
     }
 
@@ -176,6 +192,13 @@ impl MetricsCollector {
         self.start_time.elapsed()
     }
 
+    pub fn update_backend_status(&self, backend: &str, healthy: bool) {
+        let backends = self.backend_metrics.read();
+        if let Some(backend_data) = backends.get(backend) {
+            backend_data.set_status(if healthy { "up" } else { "down" });
+        }
+    }
+
     pub fn snapshot(&self) -> MetricsSnapshot {
         let times = self.response_times.read();
         let total = self.total_requests.load(Ordering::Relaxed);
@@ -236,7 +259,7 @@ impl MetricsCollector {
                             avg_response_time_ms: avg,
                             active_connections: active_conn as u64,
                             last_response_time_ms: last_rt,
-                            status: "up".to_string(),
+                            status: data.status.read().clone(),
                         },
                     )
                 })
